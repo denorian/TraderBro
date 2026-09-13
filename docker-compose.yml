@@ -1,0 +1,38 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg17
+    container_name: traderbro-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-traderbro}
+      POSTGRES_USER: ${POSTGRES_USER:-traderbro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-traderbro}
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-traderbro} -d ${POSTGRES_DB:-traderbro}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: traderbro-app
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      TBANK_TOKEN: ${TBANK_TOKEN:?TBANK_TOKEN must be set}
+      TB_API_KEY: ${TB_API_KEY:?TB_API_KEY must be set}
+      POSTGRES_HOST: timescaledb
+      POSTGRES_DB: ${POSTGRES_DB:-traderbro}
+      POSTGRES_USER: ${POSTGRES_USER:-traderbro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-traderbro}
+      TRADING_LIVE_ACK: ${TRADING_LIVE_ACK:-}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  timescaledb-data:

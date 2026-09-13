@@ -1,0 +1,103 @@
+# TraderBro — application configuration
+# All secrets come from environment variables; never place real tokens here.
+
+app:
+  sandbox: ${APP_SANDBOX:true}                 # live trading requires TRADING_LIVE_ACK env
+  money-scale: 4
+  max-bars-in-memory: 500
+  indicator-threads: 4
+  history:
+    load-on-startup: ${HISTORY_LOAD_ON_STARTUP:false}
+    daily-years: 3
+    intraday-days: 90
+    intraday-interval: FIFTEEN_MIN
+
+tbank:
+  token-env: TBANK_TOKEN
+  target: invest-public-api.tinkoff.ru
+  timeout: 10s
+  retry:
+    max-attempts: 3
+    initial-backoff: 500ms
+
+instruments:
+  tickers: [SBER, GAZP, LKOH, YDEX, VTBR]
+
+strategies:
+  SmaCrossStrategy:
+    enabled: true
+    interval: ONE_DAY
+    order-type: LIMIT
+    max-position-pct: 0.10
+    params:
+      fast: "20"
+      slow: "100"
+  EmaMomentumStrategy:
+    enabled: true
+    interval: FIFTEEN_MIN
+    order-type: LIMIT
+    max-position-pct: 0.10
+    params:
+      fastEm: "12"
+      slowEm: "26"
+      rsiPeriod: "14"
+      rsiMin: "30"
+      rsiMax: "70"
+      atrPeriod: "14"
+      atrMult: "2"
+
+risk:
+  daily-loss-limit-pct: 0.02
+  position-limit-pct: 0.10
+  exposure-limit-pct: 0.50
+  max-order-rate-per-minute: 10
+  trading-window-start: "10:00"
+  trading-window-end: "18:40"
+  allow-weekend-trading: false
+  max-stream-lag: 60s
+  trading-zone: Europe/Moscow
+
+execution:
+  order-ttl: 60s
+  auto-kill-on-reconcile-discrepancy: true
+  liquidate-on-kill: false
+
+scheduler:
+  reconcile-ms: 60000
+  strategy-reload-ms: 300000
+  portfolio-snapshot-ms: 300000
+  instrument-refresh-cron: "0 0 8 * * *"
+  staleness-monitor-ms: 10000
+
+monitoring:
+  port: 8080
+  api-key-env: TB_API_KEY
+
+spring:
+  application:
+    name: traderbro
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:5432/${POSTGRES_DB:traderbro}
+    username: ${POSTGRES_USER:traderbro}
+    password: ${POSTGRES_PASSWORD:traderbro}
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.sql
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      show-details: always
+
+server:
+  port: ${MONITORING_PORT:8080}
+
+logging:
+  config: classpath:logback-spring.xml
+  level:
+    com.traderbro: INFO
+    ru.tinkoff.piapi: WARN

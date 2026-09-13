@@ -1,0 +1,29 @@
+# TraderBro — sample configuration (copy to your runtime, override via env).
+# The canonical runtime config lives in src/main/resources/application.yml.
+# Secrets (TBANK_TOKEN, TB_API_KEY) are read from environment variables only.
+
+app:
+  sandbox: true
+
+tbank:
+  token-env: TBANK_TOKEN
+  timeout: 10s
+
+instruments:
+  tickers: [SBER, GAZP, LKOH, YDEX, VTBR]
+
+risk:
+  daily-loss-limit-pct: 0.02
+  position-limit-pct: 0.10
+  exposure-limit-pct: 0.50
+
+execution:
+  order-ttl: 60s
+
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:5432/${POSTGRES_DB:traderbro}
+    username: ${POSTGRES_USER:traderbro}
+    password: ${POSTGRES_PASSWORD:traderbro}
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.sql
