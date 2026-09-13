@@ -1,16 +1,8 @@
 # Compiled class file
 *.class
 
-# Log file
-*.log
-
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
+# Maven
+target/
 *.jar
 *.war
 *.nar
@@ -19,6 +11,27 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# Reports and local runtime artifacts
+reports/
+*.local.yml
+*.local.yaml
+
+# Secrets — never commit env files
+.env
+.env.*
+
+# OS
+.DS_Store
+
+# Virtual machine crash logs
 hs_err_pid*
 replay_pid*
