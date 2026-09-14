@@ -1,0 +1,6 @@
+${levelMark} <b>ЗАЯВКА ИСТЕКЛА</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b>
+Заявка: <code>${orderId}</code>
+Причина: <code>${reason}</code>
+Время: <code>${ts}</code>

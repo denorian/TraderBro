@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
+import ru.tinkoff.piapi.contract.v1.Future;
 import ru.tinkoff.piapi.contract.v1.HistoricCandle;
 import ru.tinkoff.piapi.contract.v1.Share;
 import ru.tinkoff.piapi.core.InvestApi;
@@ -135,6 +136,48 @@ public class TBankMarketDataProvider implements MarketDataProvider {
             }
         }
         return result;
+    }
+
+    /**
+     * Loads futures from the broker reference service and selects the nearest eligible
+     * contract per requested basic asset.
+     *
+     * @param basicAssets    underlying codes, e.g. [IMOEX, Si, BR]
+     * @param minDaysToExpiry skip contracts expiring within this many days
+     */
+    public List<Instrument> findFutures(List<String> basicAssets, int minDaysToExpiry) {
+        List<Instrument> all = new ArrayList<>();
+        List<Future> futures = withRetry(() ->
+                        // TODO: verify API — getFutures() returns List<Future>.
+                        api.getInstrumentsService().getFutures(),
+                "findFutures.list");
+        for (Future f : futures) {
+            if (f.getForiClassFlag() || f.getBlockedTcaFlag()) {
+                continue;
+            }
+            all.add(instrumentMapper.toInstrument(f));
+        }
+        return com.traderbro.core.futures.FuturesContractSelector
+                .selectNearest(all, basicAssets, java.time.LocalDate.now(), minDaysToExpiry);
+    }
+
+    /** All futures for the requested basic assets (no nearest-contract selection). */
+    public List<Instrument> findAllFutures(List<String> basicAssets) {
+        List<Instrument> all = new ArrayList<>();
+        List<Future> futures = withRetry(() ->
+                        // TODO: verify API — getFutures() returns List<Future>.
+                        api.getInstrumentsService().getFutures(),
+                "findFutures.all");
+        for (Future f : futures) {
+            if (f.getForiClassFlag() || f.getBlockedTcaFlag()) {
+                continue;
+            }
+            Instrument inst = instrumentMapper.toInstrument(f);
+            if (inst.getFutureSpec() != null && basicAssets.contains(inst.getFutureSpec().getBasicAsset())) {
+                all.add(inst);
+            }
+        }
+        return all;
     }
 
     /** True if the live stream has been marked degraded after failed reconnects. */

@@ -26,10 +26,14 @@ class RiskGateTest {
     void setUp() {
         RiskConfig rc = new RiskConfig(new BigDecimal("0.02"), new BigDecimal("0.10"),
                 new BigDecimal("0.50"), 10, LocalTime.of(10, 0), LocalTime.of(18, 40),
-                false, Duration.ofSeconds(60), MSK, 4);
+                false, Duration.ofSeconds(60), MSK, 4,
+                java.util.List.of(new RiskConfig.TradingWindow(LocalTime.of(10, 0), LocalTime.of(14, 0)),
+                        new RiskConfig.TradingWindow(LocalTime.of(19, 0), LocalTime.of(23, 50))),
+                new BigDecimal("0.30"), 2);
         List<RiskRule> rules = List.of(new KillSwitchRule(), new DailyLossLimitRule(rc),
                 new PositionLimitRule(rc), new ExposureLimitRule(rc),
-                new OrderRateLimitRule(rc), new TradingWindowRule(rc), new DataFreshnessRule(rc));
+                new OrderRateLimitRule(rc), new FuturesExpiryLockRule(rc),
+                new TradingWindowRule(rc), new DataFreshnessRule(rc));
         gate = new RiskGate(rules, msg -> { });
         instrument = Instrument.builder().figi("F").ticker("X").lot(10)
                 .minPriceIncrement(BigDecimal.ONE).tradable(true).build();

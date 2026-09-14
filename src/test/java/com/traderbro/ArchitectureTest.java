@@ -15,6 +15,7 @@ class ArchitectureTest {
     private static final String CORE = "com.traderbro.core..";
     private static final String DATA = "com.traderbro.data..";
     private static final String EXECUTION = "com.traderbro.execution..";
+    private static final String NOTIFY = "com.traderbro.notify..";
 
     @Test
     void coreDoesNotDependOnBrokerSdk() {
@@ -42,6 +43,20 @@ class ArchitectureTest {
     void coreDoesNotDependOnExecution() {
         noClasses().that().resideInAPackage(CORE)
                 .should().dependOnClassesThat().resideInAPackage(EXECUTION)
+                .check(new ClassFileImporter().importPackages("com.traderbro"));
+    }
+
+    @Test
+    void notifyDoesNotDependOnExecutionOrData() {
+        noClasses().that().resideInAPackage(NOTIFY)
+                .should().dependOnClassesThat().resideInAnyPackage(EXECUTION, DATA)
+                .check(new ClassFileImporter().importPackages("com.traderbro"));
+    }
+
+    @Test
+    void coreDoesNotDependOnNotify() {
+        noClasses().that().resideInAPackage(CORE)
+                .should().dependOnClassesThat().resideInAPackage(NOTIFY)
                 .check(new ClassFileImporter().importPackages("com.traderbro"));
     }
 }

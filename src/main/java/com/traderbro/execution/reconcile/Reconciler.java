@@ -5,6 +5,10 @@ import com.traderbro.core.domain.Position;
 import com.traderbro.core.domain.spi.BrokerGateway;
 import com.traderbro.core.domain.spi.OrderStore;
 import com.traderbro.core.domain.spi.PositionLedger;
+import com.traderbro.core.event.NotificationLevel;
+import com.traderbro.core.event.NotificationType;
+import com.traderbro.core.event.TraderEvent;
+import com.traderbro.core.event.TraderEventPublisher;
 import com.traderbro.execution.killswitch.KillSwitch;
 import java.util.HashMap;
 import java.util.List;
@@ -15,7 +19,8 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Periodically compares our internal expectation of positions/open orders with the broker.
- * A discrepancy triggers an alert and, when configured, an automatic kill-switch.
+ * A discrepancy triggers an alert, a notification and, when configured, an automatic
+ * kill-switch.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -27,6 +32,7 @@ public class Reconciler {
     private final KillSwitch killSwitch;
     private final boolean autoKillOnDiscrepancy;
     private final Consumer<String> alertSink;
+    private final TraderEventPublisher publisher;
 
     /** Runs one reconciliation pass. Returns true if consistent. */
     public boolean reconcile() {
@@ -44,6 +50,8 @@ public class Reconciler {
                     + " internal=" + expected;
             alertSink.accept(msg);
             log.error(msg);
+            publisher.publish(TraderEvent.of(NotificationType.RECONCILE_MISMATCH,
+                    NotificationLevel.CRITICAL, Map.of("details", msg)));
             if (autoKillOnDiscrepancy) {
                 killSwitch.activate("reconciliation position discrepancy");
             }
@@ -52,6 +60,8 @@ public class Reconciler {
             String msg = "RECONCILIATION MISMATCH open orders between broker and internal store";
             alertSink.accept(msg);
             log.error(msg);
+            publisher.publish(TraderEvent.of(NotificationType.RECONCILE_MISMATCH,
+                    NotificationLevel.CRITICAL, Map.of("details", msg)));
             if (autoKillOnDiscrepancy) {
                 killSwitch.activate("reconciliation order discrepancy");
             }

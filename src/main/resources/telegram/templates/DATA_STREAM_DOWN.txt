@@ -1,0 +1,5 @@
+${levelMark} <b>ПОТЕРЯН СТРИМ ДАННЫХ</b>
+━━━━━━━━━━━━━━━
+Lag: <code>${lag}</code>
+Последние данные: <code>${lastData}</code>
+Время: <code>${ts}</code>

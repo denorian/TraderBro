@@ -1,8 +1,10 @@
 package com.traderbro.core.risk;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.List;
 import lombok.Value;
 
 /**
@@ -12,24 +14,32 @@ import lombok.Value;
 @Value
 public class RiskConfig {
 
-    /** Max tolerable daily loss as a fraction of portfolio value (default 0.02). */
+    /** A half-open trading session interval [start, end). */
+    @Value
+    public static class TradingWindow {
+        LocalTime start;
+        LocalTime end;
+
+        public boolean contains(LocalTime t) {
+            return !t.isBefore(start) && t.isBefore(end);
+        }
+    }
+
     BigDecimal dailyLossLimitPct;
-    /** Max position per instrument as a fraction of portfolio value (default 0.10). */
     BigDecimal positionLimitPct;
-    /** Max total exposure as a fraction of portfolio value (default 0.50). */
     BigDecimal exposureLimitPct;
-    /** Max orders per minute (default 10). */
     int maxOrderRatePerMinute;
-    /** Trading window start (Europe/Moscow), inclusive (default 10:00). */
     LocalTime tradingWindowStart;
-    /** Trading window end (Europe/Moscow), exclusive (default 18:40). */
     LocalTime tradingWindowEnd;
-    /** Whether trading is allowed on weekends (default false). */
     boolean allowWeekendTrading;
-    /** Max tolerable stream lag before the data-freshness rule blocks trading (default 60s). */
-    java.time.Duration maxStreamLag;
-    /** Time zone used for trading-window checks. */
+    Duration maxStreamLag;
     ZoneId tradingZone;
-    /** Monetary scale used for rounding notional/exposure math. */
     int moneyScale;
+
+    /** Trading windows for futures (evening session + clearing breaks). */
+    List<TradingWindow> futuresTradingWindows;
+    /** Max total futures margin (GO) as a fraction of portfolio. */
+    BigDecimal futuresMarginLimitPct;
+    /** No new futures positions within this many days before expiry. */
+    int noNewPositionsDaysBeforeExpiry;
 }

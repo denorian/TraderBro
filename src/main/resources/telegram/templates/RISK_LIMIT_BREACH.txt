@@ -1,0 +1,5 @@
+${levelMark} <b>ПРЕВЫШЕН РИСК-ЛИМИТ</b>
+━━━━━━━━━━━━━━━
+Правило: <code>${rule}</code>
+Значение: <code>${value}</code> / лимит <code>${limit}</code>
+Время: <code>${ts}</code>

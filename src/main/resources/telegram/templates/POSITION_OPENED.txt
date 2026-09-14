@@ -1,0 +1,6 @@
+${levelMark} <b>ПОЗИЦИЯ ОТКРЫТА ${dirMark}</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b> (${typeLabel})
+Направление: ${dirMark}, <code>${qty}</code> ${qtyUnit}
+Вход: <code>${entry} ₽</code>
+Время: <code>${ts}</code>

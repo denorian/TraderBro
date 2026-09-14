@@ -8,6 +8,10 @@ import com.traderbro.core.domain.Bar;
 import com.traderbro.core.domain.Instrument;
 import com.traderbro.core.domain.enums.CandleInterval;
 import com.traderbro.core.domain.spi.BarStore;
+import com.traderbro.core.event.NotificationLevel;
+import com.traderbro.core.event.NotificationType;
+import com.traderbro.core.event.TraderEvent;
+import com.traderbro.core.event.TraderEventPublisher;
 import com.traderbro.core.indicators.SeriesFactory;
 import com.traderbro.core.strategies.StrategyParams;
 import com.traderbro.core.strategies.TradingStrategy;
@@ -40,11 +44,12 @@ public class BacktestService {
     private final String codeVersion;
     private final String reportsDir;
     private final int moneyScale;
+    private final TraderEventPublisher publisher;
 
     public BacktestService(BacktestRunner runner, BarStore barStore,
                            InstrumentRepository instrumentRepository,
                            BacktestRunRepository runRepository, String codeVersion,
-                           String reportsDir, int moneyScale) {
+                           String reportsDir, int moneyScale, TraderEventPublisher publisher) {
         this.runner = runner;
         this.barStore = barStore;
         this.instrumentRepository = instrumentRepository;
@@ -52,6 +57,7 @@ public class BacktestService {
         this.codeVersion = codeVersion;
         this.reportsDir = reportsDir;
         this.moneyScale = moneyScale;
+        this.publisher = publisher;
     }
 
     public BacktestReport runBacktest(TradingStrategy strategy, Instrument instrument,
@@ -59,14 +65,53 @@ public class BacktestService {
                                       Map<String, String> params,
                                       BigDecimal commissionPct, BigDecimal slippageBps,
                                       BigDecimal initialCapital) {
+        BacktestMetrics metrics;
+        if (instrument.isFuture()) {
+            metrics = runFuturesMetrics(strategy, instrument, interval, from, to, params,
+                    commissionPct, slippageBps, initialCapital);
+        } else {
+            List<Bar> bars = barStore.findByFigiAndInterval(instrument.getFigi(), interval, from, to);
+            BarSeries series = SeriesFactory.fromDomain(bars, DecimalNum::valueOf, bars.size() + 10,
+                    instrument.getFigi());
+            metrics = runner.run(strategy, series, new StrategyParams(params), instrument,
+                    commissionPct, slippageBps, initialCapital, new BigDecimal("0.95"));
+        }
+        BacktestReport report = buildReport(strategy, instrument, interval, from, to, params, metrics);
+        runRepository.insert(report);
+        exportMarkdown(report);
+        return report;
+    }
+
+    /** Futures backtest: commission per contract + slippage in ticks. */
+    public BacktestReport runFuturesBacktest(TradingStrategy strategy, Instrument instrument,
+                                             CandleInterval interval, Instant from, Instant to,
+                                             Map<String, String> params,
+                                             BigDecimal feePerContract, int slippageTicks,
+                                             BigDecimal initialCapital) {
+        BacktestMetrics metrics = runFuturesMetrics(strategy, instrument, interval, from, to, params,
+                feePerContract, BigDecimal.valueOf(slippageTicks), initialCapital);
+        BacktestReport report = buildReport(strategy, instrument, interval, from, to, params, metrics);
+        runRepository.insert(report);
+        exportMarkdown(report);
+        return report;
+    }
+
+    private BacktestMetrics runFuturesMetrics(TradingStrategy strategy, Instrument instrument,
+                                              CandleInterval interval, Instant from, Instant to,
+                                              Map<String, String> params,
+                                              BigDecimal feePerContract, BigDecimal slippageTicks,
+                                              BigDecimal initialCapital) {
         List<Bar> bars = barStore.findByFigiAndInterval(instrument.getFigi(), interval, from, to);
         BarSeries series = SeriesFactory.fromDomain(bars, DecimalNum::valueOf, bars.size() + 10,
                 instrument.getFigi());
-        StrategyParams strategyParams = new StrategyParams(params);
-        BigDecimal maxPct = new BigDecimal("0.95");
-        BacktestMetrics metrics = runner.run(strategy, series, strategyParams, instrument,
-                commissionPct, slippageBps, initialCapital, maxPct);
+        return runner.runFuturesDetailed(strategy, series, new StrategyParams(params), instrument,
+                feePerContract, slippageTicks.intValue(), initialCapital, new BigDecimal("0.95")).metrics();
+    }
 
+    private BacktestReport buildReport(TradingStrategy strategy, Instrument instrument,
+                                       CandleInterval interval, Instant from, Instant to,
+                                       Map<String, String> params, BacktestMetrics metrics) {
+        List<Bar> bars = barStore.findByFigiAndInterval(instrument.getFigi(), interval, from, to);
         BacktestReport report = BacktestReport.builder()
                 .id(UUID.randomUUID().toString())
                 .strategyId(strategy.id())
@@ -79,9 +124,18 @@ public class BacktestService {
                 .codeVersion(codeVersion)
                 .createdAt(Instant.now())
                 .barsCount(bars.size())
+                .instrumentType(instrument.getInstrumentType())
                 .build();
-        runRepository.insert(report);
-        exportMarkdown(report);
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("strategy", strategy.id());
+        payload.put("ticker", instrument.getTicker());
+        payload.put("totalReturn", String.format("%.2f%%", metrics.totalReturn() * 100));
+        payload.put("sharpe", String.format("%.2f", metrics.sharpe()));
+        payload.put("drawdown", String.format("%.2f%%", metrics.maxDrawdown() * 100));
+        payload.put("trades", metrics.numTrades());
+        payload.put("restUrl", "/api/backtests/" + report.getId());
+        publisher.publish(TraderEvent.of(NotificationType.BACKTEST_COMPLETED,
+                NotificationLevel.INFO, payload));
         return report;
     }
 

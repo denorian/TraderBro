@@ -7,11 +7,15 @@ import com.traderbro.core.domain.enums.CandleInterval;
 import com.traderbro.core.domain.spi.BarStore;
 import com.traderbro.core.domain.spi.MarketDataProvider;
 import com.traderbro.core.domain.spi.StreamSubscription;
+import com.traderbro.core.event.NotificationLevel;
+import com.traderbro.core.event.NotificationType;
+import com.traderbro.core.event.TraderEvent;
+import com.traderbro.core.event.TraderEventPublisher;
 import com.traderbro.execution.killswitch.KillSwitch;
 import com.traderbro.storage.InstrumentRepository;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,9 +39,11 @@ public class StreamManager {
     private final Duration staleThreshold;
     private final Consumer<String> auditSink;
     private final StreamHealth health;
+    private final TraderEventPublisher publisher;
 
     private volatile StreamSubscription subscription;
     private volatile boolean started = false;
+    private volatile boolean wasDown = false;
 
     /** Subscribes to all tradable instruments at the working interval. Idempotent. */
     public synchronized void start() {
@@ -58,6 +64,11 @@ public class StreamManager {
 
     private void onBar(Bar bar) {
         health.markData();
+        if (wasDown) {
+            wasDown = false;
+            publisher.publish(TraderEvent.of(NotificationType.DATA_STREAM_RESTORED,
+                    NotificationLevel.INFO, Map.of("lag", health.lag().getSeconds())));
+        }
         try {
             barStore.upsert(List.of(bar));
             if (bar.isFinal_()) {
@@ -76,11 +87,18 @@ public class StreamManager {
             return;
         }
         Duration lag = health.lag();
-        if (lag.compareTo(staleThreshold) > 0 && !killSwitch.isActive()) {
-            String msg = "stream data stale for " + lag + " (>" + staleThreshold + "); killing switch";
-            auditSink.accept(msg);
-            log.error(msg);
-            killSwitch.activate("stream data loss: " + lag);
+        if (lag.compareTo(staleThreshold) > 0) {
+            if (!wasDown) {
+                wasDown = true;
+                publisher.publish(TraderEvent.of(NotificationType.DATA_STREAM_DOWN,
+                        NotificationLevel.CRITICAL, Map.of("lag", lag.getSeconds())));
+            }
+            if (!killSwitch.isActive()) {
+                String msg = "stream data stale for " + lag + " (>" + staleThreshold + "); killing switch";
+                auditSink.accept(msg);
+                log.error(msg);
+                killSwitch.activate("stream data loss: " + lag);
+            }
         }
     }
 }

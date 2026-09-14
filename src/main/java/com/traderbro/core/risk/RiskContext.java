@@ -2,6 +2,7 @@ package com.traderbro.core.risk;
 
 import com.traderbro.core.domain.Instrument;
 import com.traderbro.core.domain.Portfolio;
+import com.traderbro.core.domain.enums.InstrumentType;
 import com.traderbro.core.domain.enums.OrderSide;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -18,13 +19,29 @@ public record RiskContext(
         long lots,
         BigDecimal price,
         Portfolio portfolio,
-        /** Value of the current position in {@code figi}. */
         BigDecimal instrumentPositionValue,
-        /** Value of all open positions combined. */
         BigDecimal totalExposure,
-        /** Orders submitted within the last 60 seconds. */
         int ordersLastMinute,
         boolean killSwitchActive,
         Instant now,
-        Duration streamLag) {
+        Duration streamLag,
+        InstrumentType instrumentType,
+        /** Total GO of open futures positions, rub (0 for shares). */
+        BigDecimal currentFuturesMargin) {
+
+    /**
+     * Backward-compatible constructor defaulting to a SHARE instrument with no futures margin.
+     * Kept so existing callers/tests using the 12-argument form still compile.
+     */
+    public RiskContext(String figi, Instrument instrument, OrderSide side, long lots,
+                       BigDecimal price, Portfolio portfolio, BigDecimal instrumentPositionValue,
+                       BigDecimal totalExposure, int ordersLastMinute, boolean killSwitchActive,
+                       Instant now, Duration streamLag) {
+        this(figi, instrument, side, lots, price, portfolio, instrumentPositionValue, totalExposure,
+                ordersLastMinute, killSwitchActive, now, streamLag, InstrumentType.SHARE, BigDecimal.ZERO);
+    }
+
+    public boolean isFuture() {
+        return instrumentType == InstrumentType.FUTURE;
+    }
 }

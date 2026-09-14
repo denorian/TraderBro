@@ -16,6 +16,7 @@ import com.traderbro.core.domain.spi.StrategyConfigProvider;
 import com.traderbro.core.risk.DataFreshnessRule;
 import com.traderbro.core.risk.DailyLossLimitRule;
 import com.traderbro.core.risk.ExposureLimitRule;
+import com.traderbro.core.risk.FuturesExpiryLockRule;
 import com.traderbro.core.risk.KillSwitchRule;
 import com.traderbro.core.risk.OrderRateLimitRule;
 import com.traderbro.core.risk.PositionLimitRule;
@@ -31,6 +32,7 @@ import com.traderbro.core.strategies.PositionSizer;
 import com.traderbro.core.strategies.SmaCrossStrategy;
 import com.traderbro.core.strategies.StrategyRegistry;
 import com.traderbro.core.strategies.TradingStrategy;
+import com.traderbro.core.event.TraderEventPublisher;
 import com.traderbro.data.mapper.SdkBarMapper;
 import com.traderbro.data.mapper.SdkInstrumentMapper;
 import com.traderbro.data.tbank.HistoryLoadConfig;
@@ -43,6 +45,9 @@ import com.traderbro.execution.killswitch.KillSwitch;
 import com.traderbro.execution.order.OrderManager;
 import com.traderbro.execution.reconcile.Reconciler;
 import com.traderbro.execution.state.StateRecovery;
+import com.traderbro.notify.NotificationService;
+import com.traderbro.notify.NotificationStore;
+import com.traderbro.scheduler.FuturesRolloverWatcher;
 import com.traderbro.scheduler.InstrumentRefreshScheduler;
 import com.traderbro.scheduler.PortfolioSnapshotScheduler;
 import com.traderbro.scheduler.ReconciliationScheduler;
@@ -74,7 +79,8 @@ import ru.tinkoff.piapi.core.InvestApi;
 @Configuration
 @EnableScheduling
 @EnableConfigurationProperties({AppProperties.class, TBankProperties.class,
-        RiskProperties.class, ExecutionProperties.class})
+        RiskProperties.class, ExecutionProperties.class, FuturesProperties.class,
+        com.traderbro.notify.telegram.TelegramProperties.class})
 public class ApplicationConfig {
 
     // ------------------------------------------------------------------ T-Bank SDK
@@ -138,20 +144,41 @@ public class ApplicationConfig {
 
     // ------------------------------------------------------------------ risk
     @Bean
-    public RiskConfig riskConfig(RiskProperties props) {
+    public RiskConfig riskConfig(RiskProperties props, FuturesProperties futures) {
+        java.math.BigDecimal marginPct = java.math.BigDecimal.valueOf(props.getFutures().getMaxMarginPct())
+                .movePointLeft(2);
         return new RiskConfig(props.getDailyLossLimitPct(), props.getPositionLimitPct(),
                 props.getExposureLimitPct(), props.getMaxOrderRatePerMinute(),
                 props.getTradingWindowStart(), props.getTradingWindowEnd(),
                 props.isAllowWeekendTrading(), props.getMaxStreamLag(),
-                java.time.ZoneId.of(props.getTradingZone()), 4);
+                java.time.ZoneId.of(props.getTradingZone()), 4,
+                parseWindows(props.getTradingWindows().getFutures()),
+                marginPct, futures.getNoNewPositionsDaysBeforeExpiry());
+    }
+
+    private static java.util.List<RiskConfig.TradingWindow> parseWindows(String spec) {
+        if (spec == null || spec.isBlank()) {
+            return java.util.List.of();
+        }
+        return java.util.Arrays.stream(spec.split(","))
+                .map(part -> {
+                    String[] bounds = part.split("-");
+                    if (bounds.length != 2) {
+                        throw new IllegalArgumentException("bad trading window: " + part);
+                    }
+                    return new RiskConfig.TradingWindow(
+                            java.time.LocalTime.parse(bounds[0].trim()),
+                            java.time.LocalTime.parse(bounds[1].trim()));
+                })
+                .toList();
     }
 
     @Bean
     public List<RiskRule> riskRules(RiskConfig rc) {
         return List.of(new KillSwitchRule(), new DailyLossLimitRule(rc),
                 new PositionLimitRule(rc), new ExposureLimitRule(rc),
-                new OrderRateLimitRule(rc), new TradingWindowRule(rc),
-                new DataFreshnessRule(rc));
+                new OrderRateLimitRule(rc), new FuturesExpiryLockRule(rc),
+                new TradingWindowRule(rc), new DataFreshnessRule(rc));
     }
 
     @Bean
@@ -187,10 +214,21 @@ public class ApplicationConfig {
         return registry;
     }
 
+    // ------------------------------------------------------------------ notification
+    @Bean
+    public TraderEventPublisher traderEventPublisher(TelegramProperties props,
+                                                     NotificationStore store) {
+        String token = System.getenv(props.getBotTokenEnv());
+        String chatId = System.getenv(props.getChatIdEnv());
+        boolean enabled = props.isEnabled() && token != null && !token.isBlank()
+                && chatId != null && !chatId.isBlank();
+        return new NotificationService(enabled, props.getMinLevel(), store);
+    }
+
     // ------------------------------------------------------------------ execution
     @Bean
-    public KillSwitch killSwitch() {
-        return new KillSwitch();
+    public KillSwitch killSwitch(TraderEventPublisher publisher) {
+        return new KillSwitch(publisher);
     }
 
     @Bean
@@ -198,9 +236,11 @@ public class ApplicationConfig {
                                      OrderStore orderStore, PortfolioProvider portfolioProvider,
                                      OrderEventSource eventSource, KillSwitch killSwitch,
                                      StreamHealth streamHealth, ExecutionProperties props,
-                                     AppProperties app, Consumer<String> auditSink) {
+                                     AppProperties app, Consumer<String> auditSink,
+                                     TraderEventPublisher publisher) {
         return new OrderManager(gateway, riskGate, orderStore, portfolioProvider, eventSource,
-                killSwitch, streamHealth::lag, props.getOrderTtl(), app.getMoneyScale(), auditSink);
+                killSwitch, streamHealth::lag, props.getOrderTtl(), app.getMoneyScale(), auditSink,
+                publisher);
     }
 
     @Bean
@@ -212,9 +252,10 @@ public class ApplicationConfig {
     @Bean
     public Reconciler reconciler(BrokerGateway gateway, TradeRepository ledger,
                                  OrderStore orderStore, KillSwitch killSwitch,
-                                 ExecutionProperties props, Consumer<String> alertSink) {
+                                 ExecutionProperties props, Consumer<String> alertSink,
+                                 TraderEventPublisher publisher) {
         return new Reconciler(gateway, ledger, orderStore, killSwitch,
-                props.isAutoKillOnReconcileDiscrepancy(), alertSink);
+                props.isAutoKillOnReconcileDiscrepancy(), alertSink, publisher);
     }
 
     @Bean
@@ -228,9 +269,9 @@ public class ApplicationConfig {
                                      InstrumentRepository instruments, PositionSizer sizer,
                                      OrderManager orderManager, StateRecovery recovery,
                                      SignalRepository signalRepo, PortfolioProvider portfolio,
-                                     AppProperties app) {
+                                     AppProperties app, TraderEventPublisher publisher) {
         return new SignalEngine(registry, barStore, instruments, sizer, orderManager,
-                recovery, signalRepo, portfolio, app.getMaxBarsInMemory());
+                recovery, signalRepo, portfolio, app.getMaxBarsInMemory(), publisher);
     }
 
     @Bean
@@ -238,9 +279,9 @@ public class ApplicationConfig {
                                        InstrumentRepository instruments, SignalEngine engine,
                                        KillSwitch killSwitch, AppProperties app,
                                        RiskProperties risk, Consumer<String> auditSink,
-                                       StreamHealth health) {
+                                       StreamHealth health, TraderEventPublisher publisher) {
         return new StreamManager(marketData, barStore, instruments, engine, killSwitch,
-                CandleInterval.FIFTEEN_MIN, risk.getMaxStreamLag(), auditSink, health);
+                CandleInterval.FIFTEEN_MIN, risk.getMaxStreamLag(), auditSink, health, publisher);
     }
 
     // ------------------------------------------------------------------ backtest
@@ -252,9 +293,11 @@ public class ApplicationConfig {
     @Bean
     public BacktestService backtestService(BacktestRunner runner, BarStore barStore,
                                            InstrumentRepository instruments,
-                                           BacktestRunRepository runRepo, AppProperties app) {
+                                           BacktestRunRepository runRepo, AppProperties app,
+                                           TraderEventPublisher publisher) {
         return new BacktestService(runner, barStore, instruments, runRepo,
-                System.getenv().getOrDefault("BUILD_GIT_HASH", "dev"), "reports", app.getMoneyScale());
+                System.getenv().getOrDefault("BUILD_GIT_HASH", "dev"), "reports",
+                app.getMoneyScale(), publisher);
     }
 
     // ------------------------------------------------------------------ schedulers
@@ -279,6 +322,20 @@ public class ApplicationConfig {
     public PortfolioSnapshotScheduler portfolioSnapshotScheduler(PortfolioProvider provider,
                                                                  PortfolioSnapshotRepository repo) {
         return new PortfolioSnapshotScheduler(provider, repo);
+    }
+
+    @Bean
+    public FuturesRolloverWatcher futuresRolloverWatcher(MarketDataProvider md,
+                                                         InstrumentRepository instruments,
+                                                         FuturesProperties props,
+                                                         TraderEventPublisher publisher,
+                                                         Consumer<String> auditSink) {
+        return new FuturesRolloverWatcher(md, instruments, props, publisher, auditSink);
+    }
+
+    @Bean
+    public LifecycleNotifier lifecycleNotifier(TraderEventPublisher publisher, AppProperties app) {
+        return new LifecycleNotifier(publisher, app);
     }
 
     // ------------------------------------------------------------------ history loader

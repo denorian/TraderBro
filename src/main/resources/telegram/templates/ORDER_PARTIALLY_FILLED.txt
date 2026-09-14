@@ -1,0 +1,7 @@
+${levelMark} <b>ЗАЯВКА ЧАСТИЧНО ИСПОЛНЕНА</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b> (${dirMark})
+Исполнено: <code>${filledLots}</code> / <code>${requestedLots}</code> ${qtyUnit}
+Ср. цена: <code>${avgPrice} ₽</code>
+Заявка: <code>${orderId}</code>
+Время: <code>${ts}</code>

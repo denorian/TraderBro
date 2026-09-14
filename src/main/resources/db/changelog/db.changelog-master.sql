@@ -147,3 +147,42 @@ CREATE TABLE audit_events (
 );
 CREATE INDEX idx_audit_events_ts ON audit_events (ts);
 --rollback DROP TABLE audit_events; DROP TABLE portfolio_snapshots;
+
+--changeset a.s.brovko:20260914-1
+--comment Stage 2: futures columns on instruments; existing shares migrate to SHARE.
+ALTER TABLE instruments ADD COLUMN instrument_type VARCHAR(16) NOT NULL DEFAULT 'SHARE';
+ALTER TABLE instruments ADD COLUMN basic_asset VARCHAR(32);
+ALTER TABLE instruments ADD COLUMN min_price_increment_amount NUMERIC(19,4);
+ALTER TABLE instruments ADD COLUMN expiration_date DATE;
+ALTER TABLE instruments ADD COLUMN first_trade_date DATE;
+ALTER TABLE instruments ADD COLUMN initial_margin NUMERIC(19,4);
+UPDATE instruments SET instrument_type = 'SHARE' WHERE instrument_type IS NULL;
+--rollback
+--ALTER TABLE instruments DROP COLUMN initial_margin;
+--ALTER TABLE instruments DROP COLUMN first_trade_date;
+--ALTER TABLE instruments DROP COLUMN expiration_date;
+--ALTER TABLE instruments DROP COLUMN min_price_increment_amount;
+--ALTER TABLE instruments DROP COLUMN basic_asset;
+--ALTER TABLE instruments DROP COLUMN instrument_type;
+
+--changeset a.s.brovko:20260914-2
+--comment Stage 2: persistent outbound notification queue.
+CREATE TABLE notifications (
+    id                  BIGSERIAL    NOT NULL PRIMARY KEY,
+    created_at          TIMESTAMPTZ  NOT NULL,
+    type                VARCHAR(32)  NOT NULL,
+    level               VARCHAR(16)  NOT NULL,
+    payload             JSONB        NOT NULL,
+    status              VARCHAR(16)  NOT NULL DEFAULT 'PENDING',
+    attempts            INT          NOT NULL DEFAULT 0,
+    sent_at             TIMESTAMPTZ,
+    telegram_message_id VARCHAR(64),
+    dedup_key           VARCHAR(255)
+);
+CREATE INDEX idx_notifications_status ON notifications (status, created_at);
+--rollback DROP TABLE notifications;
+
+--changeset a.s.brovko:20260914-3
+--comment Stage 2: instrument type recorded on backtest runs.
+ALTER TABLE backtest_runs ADD COLUMN instrument_type VARCHAR(16) NOT NULL DEFAULT 'SHARE';
+--rollback ALTER TABLE backtest_runs DROP COLUMN instrument_type;

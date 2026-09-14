@@ -29,9 +29,11 @@ public class BacktestRunRepository {
     public void insert(BacktestReport report) {
         named.update("""
                 INSERT INTO backtest_runs (id, strategy_id, figi, interval, from_ts, to_ts,
-                                           params, metrics, code_version, created_at, bars_count)
+                                           params, metrics, code_version, created_at, bars_count,
+                                           instrument_type)
                 VALUES (:id, :strategyId, :figi, :interval, :from, :to,
-                        CAST(:params AS jsonb), CAST(:metrics AS jsonb), :codeVersion, :createdAt, :barsCount)
+                        CAST(:params AS jsonb), CAST(:metrics AS jsonb), :codeVersion, :createdAt,
+                        :barsCount, :instrumentType)
                 """, new MapSqlParameterSource()
                 .addValue("id", report.getId())
                 .addValue("strategyId", report.getStrategyId())
@@ -43,13 +45,14 @@ public class BacktestRunRepository {
                 .addValue("metrics", toJson(report.getMetrics()))
                 .addValue("codeVersion", report.getCodeVersion())
                 .addValue("createdAt", java.sql.Timestamp.from(report.getCreatedAt()))
-                .addValue("barsCount", report.getBarsCount()));
+                .addValue("barsCount", report.getBarsCount())
+                .addValue("instrumentType", report.getInstrumentType().name()));
     }
 
     public Optional<BacktestReport> findById(String id) {
         List<BacktestReport> rows = jdbc.query("""
                 SELECT id, strategy_id, figi, interval, from_ts, to_ts, params, metrics,
-                       code_version, created_at, bars_count
+                       code_version, created_at, bars_count, instrument_type
                 FROM backtest_runs WHERE id=?
                 """, (rs, n) -> map(rs), id);
         return rows.stream().findFirst();
@@ -68,6 +71,8 @@ public class BacktestRunRepository {
                 .codeVersion(rs.getString("code_version"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .barsCount(rs.getLong("bars_count"))
+                .instrumentType(com.traderbro.core.domain.enums.InstrumentType.valueOf(
+                        rs.getString("instrument_type")))
                 .build();
     }
 

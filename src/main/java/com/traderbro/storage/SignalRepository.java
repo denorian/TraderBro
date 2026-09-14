@@ -60,6 +60,12 @@ public class SignalRepository {
         return jdbc.query(sql, mapper, java.sql.Timestamp.from(from), java.sql.Timestamp.from(to));
     }
 
+    /** Returns the latest {@code limit} signals ordered by time descending. */
+    public List<Signal> findLatest(int limit) {
+        String sql = "SELECT " + COLUMNS + " FROM signals ORDER BY ts DESC LIMIT ?";
+        return jdbc.query(sql, mapper, limit);
+    }
+
     private String toJson(Map<String, Object> snapshot) {
         try {
             return objectMapper.writeValueAsString(snapshot == null ? Map.of() : snapshot);

@@ -1,0 +1,9 @@
+${levelMark} <b>ИТОГИ ДНЯ — ${date}</b>
+━━━━━━━━━━━━━━━
+P&L дня: <b><code>${pnl} ₽</code></b> (${pnlPct}%)
+Сделок: <code>${trades}</code> (${wins} прибыльных / ${losses} убыточных)
+Сигналов: <code>${signals}</code> (accepted ${accepted} / rejected ${rejected})
+Открытые позиции: <code>${positions}</code>
+Экспозиция: <code>${exposure}%</code> портфеля; ГО фьючерсы: <code>${margin} ₽</code> (${marginPct}%)
+Kill-switch: <code>${killSwitch}</code> | Стрим: <code>${stream}</code>
+Время: <code>${ts}</code>

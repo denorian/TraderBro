@@ -1,0 +1,9 @@
+${levelMark} <b>ПОЗИЦИЯ ЗАКРЫТА ${dirMark}</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b> (${typeLabel})
+Направление: ${dirMark}, <code>${qty}</code> ${qtyUnit}
+Вход: <code>${entry}</code> → Выход: <code>${exit}</code>
+P&L: <b><code>${pnl} ₽</code></b> (${pnlPct}% к портфелю)
+Удержание: <code>${held}</code>
+Причина выхода: <code>${reason}</code>
+Время: <code>${ts}</code>

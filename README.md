@@ -5,8 +5,11 @@ T-Bank Invest API (market data + execution), runs technical analysis on **ta4j**
 with costs and walk-forward validation, enforces a hard risk perimeter, and places orders in
 **sandbox mode**. Java 25, Spring Boot, mono-module, PostgreSQL/TimescaleDB.
 
-> LLM layers are explicitly out of scope for this stage. They plug in later via the
-> `SignalFilter` seam (`NoOpSignalFilter` ships as the no-op implementation).
+Stage 2 adds **futures (FORTS)** support and **Telegram notifications** with a persistent,
+retryable outbound queue and read-only bot commands.
+
+> LLM layers are explicitly out of scope. They plug in later via the `SignalFilter` seam
+> (`NoOpSignalFilter` ships as the no-op implementation).
 
 ## Architecture
 
@@ -126,10 +129,38 @@ export TRADING_LIVE_ACK=I_UNDERSTAND_RISK
 Runtime config: `src/main/resources/application.yml` (all secrets come from env).
 Sample with comments: `config/application.yml`.
 
+Key stage-2 additions:
+
+| Section | Purpose |
+|---|---|
+| `futures.*` | contract auto-selection (basic assets, min-days-to-expiry), rollover window, expiry lock |
+| `risk.trading-windows.{shares,futures}` | per-class trading windows (futures have an evening session + clearing breaks) |
+| `risk.futures.max-margin-pct` | total GO limit (default 30%) |
+| `telegram.*` | bot token/chat-id env vars, min level, per-minute cap, retry |
+
+### Telegram setup
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token.
+2. Get your chat id: message your bot once, then call
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` and read `message.chat.id`
+   (or use `@userinfobot`).
+3. Enable and set env vars, then restart:
+
+```bash
+export TELEGRAM_ENABLED=true
+export TELEGRAM_BOT_TOKEN='<from BotFather>'
+export TELEGRAM_CHAT_ID='<your chat id>'
+```
+
+The bot is **long-polling** (works behind NAT), answers read-only commands
+(`/status`, `/positions`, `/signals [N]`, `/killswitch`, `/help`) and never exposes risk control.
+
 ## Tests
 
 - Unit: `QuotationMapperTest`, `HistoryChunkerTest`, `PositionSizerTest`, `RiskGateTest`,
-  `SmaCrossStrategyTest`, `BacktestRunnerNoLookAheadTest`, `OrderManagerTest`.
+  `SmaCrossStrategyTest`, `BacktestRunnerNoLookAheadTest`, `OrderManagerTest`,
+  `FuturesPositionSizerTest`, `FuturesContractSelectorTest`, `FuturesExpiryLockRuleTest`,
+  `TelegramMessageFormatterTest`, `NotificationDeduplicatorTest`, `NotificationRateLimiterTest`.
 - Integration (Testcontainers + TimescaleDB): `BarRepositoryIT` — applies all Liquibase
   migrations on a clean container and verifies idempotent bar upsert.
 - Architecture: `ArchitectureTest` (ArchUnit) — core⇏SDK/Web, data⇏execution, core⇏execution.

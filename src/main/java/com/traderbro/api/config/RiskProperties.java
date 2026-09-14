@@ -22,6 +22,23 @@ public class RiskProperties {
     private LocalTime tradingWindowEnd = LocalTime.of(18, 40);
     private boolean allowWeekendTrading = false;
     private Duration maxStreamLag = Duration.ofSeconds(60);
-    /** Zone used for trading-window checks. */
     private String tradingZone = "Europe/Moscow";
+    /** Futures-specific risk knobs. */
+    private Futures futures = new Futures();
+    /** Per-instrument-class trading windows ("HH:mm-HH:mm[,HH:mm-HH:mm...]"). */
+    private TradingWindows tradingWindows = new TradingWindows();
+
+    @Getter
+    @Setter
+    public static class Futures {
+        /** Max total futures margin (GO) as a fraction of portfolio, percent (default 30). */
+        private int maxMarginPct = 30;
+    }
+
+    @Getter
+    @Setter
+    public static class TradingWindows {
+        private String shares = "10:00-18:40";
+        private String futures = "10:00-14:00,14:05-18:45,19:00-23:50";
+    }
 }

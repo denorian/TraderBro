@@ -1,0 +1,5 @@
+${levelMark} <b>ПРИЛОЖЕНИЕ ЗАПУЩЕНО</b>
+━━━━━━━━━━━━━━━
+Режим: <code>${mode}</code>
+Версия: <code>${version}</code>
+Время: <code>${ts}</code>

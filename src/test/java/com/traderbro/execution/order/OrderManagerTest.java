@@ -61,7 +61,9 @@ class OrderManagerTest {
                         .minPriceIncrement(BigDecimal.ONE).tradable(true).build()));
 
         manager = new OrderManager(gateway, riskGate, orderStore, portfolio, eventSource,
-                new KillSwitch(), new StreamHealth()::lag, Duration.ofSeconds(60), 4, msg -> { });
+                new KillSwitch(mock(com.traderbro.core.event.TraderEventPublisher.class)),
+                new StreamHealth()::lag, Duration.ofSeconds(60), 4, msg -> { },
+                mock(com.traderbro.core.event.TraderEventPublisher.class));
     }
 
     private OrderRequest request() {

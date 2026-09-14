@@ -1,6 +1,12 @@
 package com.traderbro.execution.killswitch;
 
+import com.traderbro.core.event.NotificationLevel;
+import com.traderbro.core.event.NotificationType;
+import com.traderbro.core.event.TraderEvent;
+import com.traderbro.core.event.TraderEventPublisher;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,6 +28,11 @@ public class KillSwitch {
 
     private volatile Consumer<String> onActivate = r -> { };
     private volatile Runnable onDeactivate = () -> { };
+    private final TraderEventPublisher publisher;
+
+    public KillSwitch(TraderEventPublisher publisher) {
+        this.publisher = publisher;
+    }
 
     /** Wires the activation side-effects (cancel orders, optionally liquidate). */
     public void setOnActivate(Consumer<String> onActivate) {
@@ -45,6 +56,14 @@ public class KillSwitch {
         this.deactivatedAt = null;
         log.error("KILL-SWITCH ACTIVATED: {}", reason);
         onActivate.accept(reason);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("reason", reason);
+        payload.put("cancelledOrders", 0);
+        payload.put("liquidated", "не закрывались");
+        payload.put("closePositions", false);
+        payload.put("positions", "—");
+        publisher.publish(TraderEvent.of(NotificationType.KILL_SWITCH_ACTIVATED,
+                NotificationLevel.CRITICAL, payload));
         return true;
     }
 
@@ -66,6 +85,8 @@ public class KillSwitch {
         this.deactivatedAt = Instant.now();
         log.info("KILL-SWITCH DEACTIVATED (manual, confirmed)");
         onDeactivate.run();
+        publisher.publish(TraderEvent.of(NotificationType.KILL_SWITCH_DEACTIVATED,
+                NotificationLevel.WARNING, Map.of("reason", "manual, confirmed")));
         return true;
     }
 

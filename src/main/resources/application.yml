@@ -62,12 +62,29 @@ execution:
   auto-kill-on-reconcile-discrepancy: true
   liquidate-on-kill: false
 
+futures:
+  enabled: true
+  basic-assets: [IMOEX, Si, BR]
+  min-days-to-expiry: 7
+  rollover-days-before: 5
+  no-new-positions-days-before-expiry: 2
+
+telegram:
+  enabled: ${TELEGRAM_ENABLED:false}
+  bot-token-env: TELEGRAM_BOT_TOKEN
+  chat-id-env: TELEGRAM_CHAT_ID
+  min-level: INFO
+  max-messages-per-minute: 20
+  retry-attempts: 3
+  worker-poll-ms: 5000
+
 scheduler:
   reconcile-ms: 60000
   strategy-reload-ms: 300000
   portfolio-snapshot-ms: 300000
   instrument-refresh-cron: "0 0 8 * * *"
   staleness-monitor-ms: 10000
+  futures-rollover-cron: "0 0 9 * * *"
 
 monitoring:
   port: 8080

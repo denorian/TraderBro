@@ -1,0 +1,7 @@
+${levelMark} <b>ЗАЯВКА ИСПОЛНЕНА</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b> (${dirMark})
+Объём: <code>${filledLots}</code> ${qtyUnit}
+Ср. цена: <code>${avgPrice} ₽</code>
+Заявка: <code>${orderId}</code>
+Время: <code>${ts}</code>

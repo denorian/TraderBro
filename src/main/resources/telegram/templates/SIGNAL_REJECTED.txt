@@ -1,0 +1,7 @@
+${levelMark} <b>СИГНАЛ ОТКЛОНЁН</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b> (${dirMark})
+Стратегия: <code>${strategy}</code>
+Правило риск-гейта: <code>${rule}</code>
+Причина: <code>${reason}</code>
+Время: <code>${ts}</code>

@@ -1,0 +1,8 @@
+${levelMark} <b>БЭКТЕСТ ЗАВЕРШЁН</b>
+━━━━━━━━━━━━━━━
+Стратегия: <code>${strategy}</code> · Инструмент: <b>${ticker}</b>
+Доходность: <code>${totalReturn}</code>
+Sharpe: <code>${sharpe}</code> · Просадка: <code>${drawdown}</code>
+Сделок: <code>${trades}</code>
+Отчёт: <code>${restUrl}</code>
+Время: <code>${ts}</code>

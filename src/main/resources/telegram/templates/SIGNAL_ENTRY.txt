@@ -1,0 +1,9 @@
+${levelMark} <b>СИГНАЛ: ВХОД ${dirMark}</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b> (${typeLabel})
+Стратегия: <code>${strategy}</code>
+Цена сигнала: <code>${price} ₽</code>
+Объём: <code>${qty}</code> ${qtyUnit} (~<code>${notional} ₽</code>, ${pct}% портфеля)
+Стоп: <code>${stop} ₽</code> (${stopPct}%)
+Индикаторы: <code>${indicators}</code>
+Время: <code>${ts}</code>

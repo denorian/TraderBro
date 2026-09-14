@@ -11,6 +11,10 @@ import com.traderbro.core.domain.enums.OrderSide;
 import com.traderbro.core.domain.enums.SignalVerdict;
 import com.traderbro.core.domain.spi.BarStore;
 import com.traderbro.core.domain.spi.PortfolioProvider;
+import com.traderbro.core.event.NotificationLevel;
+import com.traderbro.core.event.NotificationType;
+import com.traderbro.core.event.TraderEvent;
+import com.traderbro.core.event.TraderEventPublisher;
 import com.traderbro.core.indicators.SeriesFactory;
 import com.traderbro.core.strategies.PositionSizer;
 import com.traderbro.core.strategies.StrategyParams;
@@ -46,6 +50,7 @@ public class SignalEngine {
     private final SignalRepository signalRepository;
     private final PortfolioProvider portfolioProvider;
     private final int maxBarsInMemory;
+    private final TraderEventPublisher publisher;
 
     /** Called for each newly closed bar from the stream. */
     public void onClosedBar(Bar bar) {
@@ -97,9 +102,23 @@ public class SignalEngine {
         if (raw.getVerdict() != SignalVerdict.ACCEPTED) {
             log.info("signal {} for {} verdict={} reason={}", cfg.getId(), figi,
                     raw.getVerdict(), raw.getReason());
+            publishSignalRejected(cfg, instrument, raw.getVerdict().name(), raw.getReason());
             return;
         }
         submitOrder(cfg, instrument, raw);
+    }
+
+    private void publishSignalRejected(StrategyConfig cfg, Instrument instrument,
+                                       String rule, String reason) {
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("ticker", instrument.getTicker());
+        payload.put("strategy", cfg.getId());
+        payload.put("dirMark", "📈 LONG");
+        payload.put("rule", rule);
+        payload.put("reason", reason);
+        payload.put("figi", instrument.getFigi());
+        publisher.publish(TraderEvent.of(NotificationType.SIGNAL_REJECTED,
+                NotificationLevel.INFO, payload));
     }
 
     private void submitOrder(StrategyConfig cfg, Instrument instrument, Signal signal) {
@@ -121,5 +140,36 @@ public class SignalEngine {
         Order order = orderManager.submit(req);
         log.info("submitted {} lots {} for {} -> status {}", sizing.getLots(),
                 signal.getFigi(), cfg.getId(), order.getStatus());
+        if (order.getStatus() == com.traderbro.core.domain.enums.OrderStatus.REJECTED) {
+            publishSignalRejected(cfg, instrument, "RiskGate",
+                    order.getReason() == null ? "rejected" : order.getReason());
+            return;
+        }
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("ticker", instrument.getTicker());
+        payload.put("strategy", cfg.getId());
+        payload.put("dirMark", "📈 LONG");
+        payload.put("typeLabel", instrument.isFuture() ? "фьючерс, " + instrument.getFutureSpec().getBasicAsset() : "акция");
+        payload.put("price", signal.getPrice());
+        payload.put("qty", sizing.getLots());
+        payload.put("qtyUnit", instrument.isFuture() ? "контр." : "лот");
+        payload.put("notional", sizing.getNotional());
+        payload.put("pct", sizing.getEffectivePct().movePointRight(2).setScale(1, java.math.RoundingMode.HALF_UP));
+        payload.put("stop", signal.getPrice());
+        payload.put("stopPct", "0.00");
+        payload.put("indicators", snapshotString(signal));
+        publisher.publish(TraderEvent.of(NotificationType.SIGNAL_ENTRY,
+                NotificationLevel.INFO, payload));
+    }
+
+    private String snapshotString(Signal signal) {
+        StringBuilder sb = new StringBuilder();
+        signal.getIndicatorSnapshot().forEach((k, v) -> {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(k).append("=").append(v);
+        });
+        return sb.length() == 0 ? "—" : sb.toString();
     }
 }

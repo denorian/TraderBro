@@ -1,6 +1,7 @@
 package com.traderbro.core.backtest;
 
 import com.traderbro.core.domain.enums.CandleInterval;
+import com.traderbro.core.domain.enums.InstrumentType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
@@ -26,4 +27,6 @@ public class BacktestReport {
     String codeVersion;
     Instant createdAt;
     long barsCount;
+    @Builder.Default
+    InstrumentType instrumentType = InstrumentType.SHARE;
 }

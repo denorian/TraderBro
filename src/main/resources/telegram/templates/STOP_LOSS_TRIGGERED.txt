@@ -1,0 +1,6 @@
+${levelMark} <b>СТОП-ВЫХОД СРАБОТАЛ</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b>
+Вход: <code>${entry} ₽</code> → Выход: <code>${exit} ₽</code>
+P&L: <b><code>${pnl} ₽</code></b> (${pnlPct}%)
+Время: <code>${ts}</code>

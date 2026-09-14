@@ -3,11 +3,13 @@ package com.traderbro.core.risk;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Restricts trading to the configured daily window (Europe/Moscow) and blocks weekend
- * trading unless explicitly enabled.
+ * Restricts trading to the configured daily window and blocks weekend trading unless enabled.
+ * Shares use the single main session; futures use their own window list (evening session +
+ * clearing breaks), as configured in {@link RiskConfig#getFuturesTradingWindows()}.
  */
 @RequiredArgsConstructor
 public class TradingWindowRule implements RiskRule {
@@ -35,6 +37,13 @@ public class TradingWindowRule implements RiskRule {
             return RiskDecision.allow();
         }
         LocalTime t = now.toLocalTime();
+        if (ctx.isFuture()) {
+            List<RiskConfig.TradingWindow> windows = config.getFuturesTradingWindows();
+            if (windows != null && windows.stream().anyMatch(w -> w.contains(t))) {
+                return RiskDecision.allow();
+            }
+            return RiskDecision.deny(name(), "outside futures trading windows: " + windows);
+        }
         LocalTime start = config.getTradingWindowStart();
         LocalTime end = config.getTradingWindowEnd();
         boolean inWindow = !t.isBefore(start) && t.isBefore(end);

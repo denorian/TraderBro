@@ -1,0 +1,5 @@
+${levelMark} <b>ОШИБКА ТОРГОВОГО КОНТУРА</b>
+━━━━━━━━━━━━━━━
+${message}
+Лог: <code>${logRef}</code>
+Время: <code>${ts}</code>

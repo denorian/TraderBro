@@ -1,0 +1,7 @@
+${levelMark} <b>KILL-SWITCH АКТИВИРОВАН</b>
+━━━━━━━━━━━━━━━
+Причина: <code>${reason}</code>
+Действия: отменено заявок: <code>${cancelledOrders}</code>; позиции: <b>${liquidated}</b> (close-positions=${closePositions})
+Открытые позиции: <code>${positions}</code>
+Деактивация: только вручную через REST
+Время: <code>${ts}</code>

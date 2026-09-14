@@ -1,0 +1,7 @@
+${levelMark} <b>СИГНАЛ: ВЫХОД ${dirMark}</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b> (${typeLabel})
+Стратегия: <code>${strategy}</code>
+Цена сигнала: <code>${price} ₽</code>
+Причина: <code>${reason}</code>
+Время: <code>${ts}</code>
