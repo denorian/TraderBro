@@ -19,7 +19,7 @@ public final class QuotationMapper {
 
     /** Converts a {@link Quotation} to {@link BigDecimal} at the given money scale. */
     public static BigDecimal toBigDecimal(Quotation q, int scale) {
-        return normalize(units(q.getUnits()), q.getNano(), scale);
+        return normalize(q.getUnits(), q.getNano(), scale);
     }
 
     /** Converts a {@link MoneyValue} to {@link BigDecimal} at the given money scale. */

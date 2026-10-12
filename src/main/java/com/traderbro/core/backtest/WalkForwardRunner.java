@@ -121,6 +121,6 @@ public class WalkForwardRunner {
         if (index < 0 || index >= s.getBarCount()) {
             return null;
         }
-        return s.getBar(index).getEndTime().toInstant();
+        return s.getBar(index).getEndTime();
     }
 }

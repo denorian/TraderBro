@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -20,7 +21,7 @@ public class TradeRepository implements PositionLedger {
     private final JdbcTemplate jdbc;
     private final int moneyScale;
 
-    public TradeRepository(JdbcTemplate jdbc, int moneyScale) {
+    public TradeRepository(JdbcTemplate jdbc, @Value("${app.money-scale}") int moneyScale) {
         this.jdbc = jdbc;
         this.named = new NamedParameterJdbcTemplate(jdbc);
         this.moneyScale = moneyScale;

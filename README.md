@@ -85,9 +85,16 @@ mvn -B verify                # adds jacoco coverage check, checkstyle, spotbugs
 mvn -B -P owasp verify       # CI profile: OWASP dependency-check (CVSS>=7 fails the build)
 ```
 
-### 4. Apply migrations & load history
+### 4. Apply migrations
 
-Migrations run automatically on startup (Liquibase). To backfill history on first run:
+Migrations are applied by the docker-compose `migrate` service (or the standalone
+`scripts/migrate.sh`), not by the app at startup:
+
+```bash
+docker compose run --rm migrate     # or: scripts/migrate.sh
+```
+
+To backfill history on first run:
 
 ```bash
 export HISTORY_LOAD_ON_STARTUP=true

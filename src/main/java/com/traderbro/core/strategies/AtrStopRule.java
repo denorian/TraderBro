@@ -38,10 +38,8 @@ public class AtrStopRule implements Rule {
         if (atrValue == null) {
             return false;
         }
-        // TODO: verify Trade entry-price accessor name in ta4j 0.24.1
-        // (getPricePerAsset() in earlier versions; otherwise use getPrice()).
         Num entryPrice = entry.getPricePerAsset();
-        Num stop = entryPrice.minus(atrValue.multipliedBy(close.numFactory().numOf(atrMult)));
+        Num stop = entryPrice.minus(atrValue.multipliedBy(close.getBarSeries().numFactory().numOf(atrMult)));
         return close.getValue(index).isLessThan(stop);
     }
 }

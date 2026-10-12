@@ -36,9 +36,18 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
      */
     protected Signal newEntrySignal(BarSeries series, SignalFilter filter,
                                     Map<String, Object> indicatorValues) {
+        return newEntrySignal(series, Direction.LONG, filter, indicatorValues);
+    }
+
+    /**
+     * Direction-aware variant used by strategies that can also enter short (futures).
+     * The filter weight is looked up for the actual direction.
+     */
+    protected Signal newEntrySignal(BarSeries series, Direction direction,
+                                    SignalFilter filter, Map<String, Object> indicatorValues) {
         Instant ts = SeriesFactory.lastEndTime(series);
         BigDecimal price = lastPrice(series);
-        double weight = filter.weight(series.getName(), Direction.LONG);
+        double weight = filter.weight(series.getName(), direction);
 
         SignalVerdict verdict;
         String reason = null;
@@ -58,7 +67,7 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
                 .strategyId(id())
                 .figi(series.getName())
                 .ts(ts)
-                .direction(Direction.LONG)
+                .direction(direction)
                 .price(price)
                 .indicatorSnapshot(indicatorValues)
                 .verdict(verdict)

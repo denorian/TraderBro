@@ -35,4 +35,10 @@ public interface MarketDataProvider {
      * Result is cached in the {@code instruments} table and refreshed on a daily schedule.
      */
     List<Instrument> findInstruments(List<String> tickers);
+
+    /**
+     * Returns all tradable futures for the requested basic assets (no nearest-contract
+     * selection), used to pick the next contract when the current one approaches expiry.
+     */
+    List<Instrument> findAllFutures(List<String> basicAssets);
 }

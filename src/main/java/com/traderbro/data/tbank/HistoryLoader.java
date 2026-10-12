@@ -49,7 +49,9 @@ public class HistoryLoader implements CommandLineRunner {
     }
 
     private void loadDaily(Instrument inst, Instant now) {
-        Instant from = now.minus(config.getDailyYears(), ChronoUnit.YEARS);
+        // Instant does not support ChronoUnit.YEARS; subtract via the UTC calendar.
+        Instant from = now.atZone(java.time.ZoneOffset.UTC)
+                .minusYears(config.getDailyYears()).toInstant();
         loadRange(inst, from, now, CandleInterval.ONE_DAY);
     }
 

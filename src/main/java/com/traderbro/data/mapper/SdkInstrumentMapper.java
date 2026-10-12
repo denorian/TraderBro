@@ -1,5 +1,6 @@
 package com.traderbro.data.mapper;
 
+import com.google.protobuf.Timestamp;
 import com.traderbro.core.domain.FutureSpec;
 import com.traderbro.core.domain.Instrument;
 import com.traderbro.core.domain.enums.InstrumentType;
@@ -33,7 +34,7 @@ public final class SdkInstrumentMapper {
                 .lot(s.getLot())
                 .minPriceIncrement(minStep)
                 .board(s.getExchange() + "/" + s.getRealExchange())
-                .tradable(s.getTradingStatus().getNumber() != 0 && !s.getForiClassFlag() && !s.getBlockedTcaFlag())
+                .tradable(!s.getBlockedTcaFlag())
                 .instrumentType(InstrumentType.SHARE)
                 .build();
     }
@@ -41,8 +42,7 @@ public final class SdkInstrumentMapper {
     /** Maps an SDK {@link Future} to a domain instrument with a {@link FutureSpec}. */
     public Instrument toInstrument(Future f) {
         BigDecimal tick = price(f.getMinPriceIncrement());
-        BigDecimal tickAmount = f.getMinPriceIncrementAmount().getUnits() != 0
-                || f.getMinPriceIncrementAmount().getNano() != 0
+        BigDecimal tickAmount = hasValue(f.getMinPriceIncrementAmount())
                 ? QuotationMapper.toBigDecimal(f.getMinPriceIncrementAmount(), moneyScale)
                 : BigDecimal.ZERO.setScale(moneyScale);
         FutureSpec spec = FutureSpec.builder()
@@ -55,8 +55,7 @@ public final class SdkInstrumentMapper {
                 .minPriceIncrementAmount(tickAmount)
                 .expirationDate(toDate(f.getExpirationDate()))
                 .firstTradeDate(toDate(f.getFirstTradeDate()))
-                .initialMargin(f.getInitialMarginOnBuy() != null && (f.getInitialMarginOnBuy().getUnits() != 0
-                        || f.getInitialMarginOnBuy().getNano() != 0)
+                .initialMargin(hasValue(f.getInitialMarginOnBuy())
                         ? QuotationMapper.toBigDecimal(f.getInitialMarginOnBuy(), moneyScale)
                         : BigDecimal.ZERO.setScale(moneyScale))
                 .build();
@@ -64,28 +63,34 @@ public final class SdkInstrumentMapper {
                 .figi(f.getFigi())
                 .ticker(f.getTicker())
                 .name(f.getName())
-                .isin(f.getIsin())
                 .currency(f.getCurrency())
                 .lot(f.getLot())
                 .minPriceIncrement(tick)
                 .board(f.getExchange())
-                .tradable(f.getTradingStatus().getNumber() != 0 && !f.getForiClassFlag() && !f.getBlockedTcaFlag())
+                .tradable(!f.getBlockedTcaFlag())
                 .instrumentType(InstrumentType.FUTURE)
                 .futureSpec(spec)
                 .build();
     }
 
     private BigDecimal price(ru.tinkoff.piapi.contract.v1.Quotation q) {
-        return (q.getUnits() != 0 || q.getNano() != 0)
+        return hasValue(q)
                 ? QuotationMapper.toBigDecimal(q, moneyScale)
                 : BigDecimal.ONE.setScale(moneyScale);
     }
 
-    private static LocalDate toDate(ru.tinkoff.piapi.contract.v1.Timestamp ts) {
-        if (ts == null) {
+    private static boolean hasValue(ru.tinkoff.piapi.contract.v1.Quotation q) {
+        return q != null && (q.getUnits() != 0 || q.getNano() != 0);
+    }
+
+    private static boolean hasValue(ru.tinkoff.piapi.contract.v1.MoneyValue m) {
+        return m != null && (m.getUnits() != 0 || m.getNano() != 0);
+    }
+
+    private static LocalDate toDate(Timestamp ts) {
+        if (ts == null || (ts.getSeconds() == 0 && ts.getNanos() == 0)) {
             return null;
         }
-        // TODO: verify API — Timestamp field names in the SDK contract.
         return Instant.ofEpochSecond(ts.getSeconds(), ts.getNanos())
                 .atZone(ZoneId.of("Europe/Moscow")).toLocalDate();
     }

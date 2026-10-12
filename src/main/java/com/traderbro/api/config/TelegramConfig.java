@@ -10,6 +10,7 @@ import com.traderbro.notify.telegram.DefaultTelegramSender;
 import com.traderbro.notify.telegram.TelegramCommandBot;
 import com.traderbro.notify.telegram.TelegramCommandHandler;
 import com.traderbro.notify.telegram.TelegramMessageFormatter;
+import com.traderbro.notify.telegram.TelegramProperties;
 import com.traderbro.notify.telegram.TelegramQueueWorker;
 import com.traderbro.notify.telegram.TelegramSender;
 import com.traderbro.storage.SignalRepository;
@@ -42,9 +43,8 @@ public class TelegramConfig {
     @Bean
     public TelegramSender telegramSender(TelegramProperties props) {
         String token = requireEnv(props.getBotTokenEnv());
-        // TODO: verify API — TelegramClient construction in TelegramBots 9.x.
-        Object client = org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient.builder()
-                .token(token).build();
+        org.telegram.telegrambots.meta.generics.TelegramClient client =
+                new org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient(token);
         return new DefaultTelegramSender(client);
     }
 
@@ -54,7 +54,7 @@ public class TelegramConfig {
                                                    TelegramMessageFormatter formatter) {
         String chatId = requireEnv(props.getChatIdEnv());
         return new TelegramQueueWorker(store, sender, formatter, chatId,
-                props.getMaxMessagesPerMinute(), props.getRetryAttempts());
+                props.getMaxMessagesPerMinute(), (int) props.getRetryAttempts());
     }
 
     @Bean

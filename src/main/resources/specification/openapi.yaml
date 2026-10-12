@@ -1,0 +1,108 @@
+openapi: 3.0.3
+info:
+  title: TraderBro Monitoring API
+  version: 0.3.0
+  description: Read-only API for the TraderBro monitoring UI (stage 3). All endpoints require the `X-Api-Key` header.
+servers:
+  - url: /
+security:
+  - ApiKeyAuth: []
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+  schemas:
+    InstrumentDto:
+      type: object
+      properties:
+        figi: { type: string }
+        ticker: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [SHARE, FUTURE] }
+        currency: { type: string }
+        lot: { type: integer }
+        tradable: { type: boolean }
+        streamUp: { type: boolean }
+    BarDto:
+      type: object
+      properties:
+        ts: { type: string, format: date-time }
+        open: { type: number, format: double }
+        high: { type: number, format: double }
+        low: { type: number, format: double }
+        close: { type: number, format: double }
+        volume: { type: integer, format: int64 }
+    AlligatorPointDto:
+      type: object
+      properties:
+        ts: { type: string, format: date-time }
+        jaw: { type: number, nullable: true }
+        teeth: { type: number, nullable: true }
+        lips: { type: number, nullable: true }
+    AoPointDto:
+      type: object
+      properties:
+        ts: { type: string, format: date-time }
+        ao: { type: number, nullable: true }
+        rising: { type: boolean }
+    ChartResponse:
+      type: object
+      properties:
+        figi: { type: string }
+        interval: { type: string }
+        bars: { type: array, items: { $ref: '#/components/schemas/BarDto' } }
+        alligator: { type: array, items: { $ref: '#/components/schemas/AlligatorPointDto' } }
+        ao: { type: array, items: { $ref: '#/components/schemas/AoPointDto' } }
+    LatestIndicatorDto:
+      type: object
+      properties:
+        figi: { type: string }
+        interval: { type: string }
+        ts: { type: string, format: date-time, nullable: true }
+        alligator: { type: object, additionalProperties: true }
+        ao: { type: object, additionalProperties: true }
+paths:
+  /api/instruments:
+    get:
+      summary: List tradable instruments with stream status
+      operationId: listInstruments
+      responses:
+        '200':
+          description: Instrument list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/InstrumentDto' }
+  /api/chart/{figi}:
+    get:
+      summary: Candles + Alligator lines + Awesome Oscillator for one instrument
+      operationId: getChart
+      parameters:
+        - { name: figi, in: path, required: true, schema: { type: string } }
+        - { name: interval, in: query, schema: { type: string, default: 1h } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, default: 500 } }
+      responses:
+        '200':
+          description: Chart data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChartResponse' }
+  /api/indicators/latest:
+    get:
+      summary: Latest Alligator + AO snapshots per instrument
+      operationId: getLatestIndicators
+      parameters:
+        - { name: interval, in: query, schema: { type: string, default: 1h } }
+      responses:
+        '200':
+          description: Latest snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LatestIndicatorDto' }

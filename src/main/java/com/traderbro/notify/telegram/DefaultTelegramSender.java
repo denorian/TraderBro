@@ -1,34 +1,34 @@
 package com.traderbro.notify.telegram;
 
 import lombok.extern.slf4j.Slf4j;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiRequestException;
 
 /**
- * Sends HTML messages through the TelegramBots 9.x client.
- * <p>NOTE: the TelegramBots 9.x API surface below is provisional and must be verified against
- * the pinned version ({@code // TODO: verify API}).
+ * Sends HTML messages through the TelegramBots 9.x {@link org.telegram.telegrambots.meta.generics.TelegramClient}.
+ * <p>Map a Telegram 429 onto {@link TelegramSender.SendResult#rateLimited(long)} so the queue
+ * worker can pause by the server's {@code retry_after}.
  */
 @Slf4j
 public class DefaultTelegramSender implements TelegramSender {
 
-    private final Object telegramClient;
+    private final org.telegram.telegrambots.meta.generics.TelegramClient telegramClient;
 
-    public DefaultTelegramSender(Object telegramClient) {
+    public DefaultTelegramSender(org.telegram.telegrambots.meta.generics.TelegramClient telegramClient) {
         this.telegramClient = telegramClient;
     }
 
     @Override
     public SendResult sendHtml(String chatId, String html) {
         try {
-            // TODO: verify API — SendMessage builder + execute(TelegramClient) semantics.
-            var message = org.telegram.telegrambots.meta.api.methods.send.SendMessage.builder()
+            SendMessage message = SendMessage.builder()
                     .chatId(chatId)
                     .text(html)
                     .parseMode("HTML")
                     .build();
-            var response = ((org.telegram.telegrambots.client.telegram.TelegramClient) telegramClient)
-                    .execute(message);
+            var response = telegramClient.execute(message);
             return SendResult.ok(String.valueOf(response.getMessageId()));
-        } catch (org.telegram.telegrambots.meta.exceptions.TelegramApiRequestException e) {
+        } catch (TelegramApiRequestException e) {
             Integer retryAfter = e.getParameters() != null ? e.getParameters().getRetryAfter() : null;
             if (retryAfter != null) {
                 log.warn("telegram rate-limited, retry after {}s", retryAfter);

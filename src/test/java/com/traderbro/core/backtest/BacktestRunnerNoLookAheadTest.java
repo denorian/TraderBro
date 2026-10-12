@@ -80,11 +80,11 @@ class BacktestRunnerNoLookAheadTest {
 
         // All base trades have entryBar within the shared prefix [0..199].
         List<String> baseKeys = base.trades().stream()
-                .map(t -> t.entryBar() + ":" + t.entryEquity())
+                .map(t -> t.getEntryBar() + ":" + t.getEntryEquity())
                 .toList();
         List<String> extKeys = extended.trades().stream()
-                .filter(t -> t.entryBar() <= 199)
-                .map(t -> t.entryBar() + ":" + t.entryEquity())
+                .filter(t -> t.getEntryBar() <= 199)
+                .map(t -> t.getEntryBar() + ":" + t.getEntryEquity())
                 .toList();
         assertThat(extKeys).containsExactlyElementsOf(baseKeys);
     }

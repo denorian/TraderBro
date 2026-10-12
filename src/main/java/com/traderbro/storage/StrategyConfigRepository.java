@@ -1,7 +1,7 @@
 package com.traderbro.storage;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import com.traderbro.core.domain.StrategyConfig;
 import com.traderbro.core.domain.enums.CandleInterval;
 import com.traderbro.core.domain.enums.OrderType;
@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -33,7 +34,7 @@ public class StrategyConfigRepository implements StrategyConfigProvider {
     private final int moneyScale;
     private final RowMapper<StrategyConfig> mapper;
 
-    public StrategyConfigRepository(JdbcTemplate jdbc, ObjectMapper objectMapper, int moneyScale) {
+    public StrategyConfigRepository(JdbcTemplate jdbc, ObjectMapper objectMapper, @Value("${app.money-scale}") int moneyScale) {
         this.jdbc = jdbc;
         this.named = new NamedParameterJdbcTemplate(jdbc);
         this.objectMapper = objectMapper;

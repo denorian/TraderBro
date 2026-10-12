@@ -2,6 +2,7 @@ package com.traderbro.execution.order;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -47,10 +48,10 @@ class OrderManagerTest {
         PortfolioProvider portfolio = mock(PortfolioProvider.class);
         OrderEventSource eventSource = mock(OrderEventSource.class);
         onFill = new AtomicReference<>();
-        when(eventSource.subscribe(any())).thenAnswer(inv -> {
+        doAnswer(inv -> {
             onFill.set(inv.getArgument(0));
             return null;
-        });
+        }).when(eventSource).subscribe(any());
 
         when(riskGate.evaluate(any())).thenReturn(RiskDecision.allow());
         when(gateway.postOrder(any())).thenReturn(
@@ -118,7 +119,7 @@ class OrderManagerTest {
         // Verify the updated order recorded the partial fill.
         org.mockito.ArgumentCaptor<Order> captor =
                 org.mockito.ArgumentCaptor.forClass(Order.class);
-        verify(orderStore, org.mockito.ArgumentMatchers.atLeastOnce()).update(captor.capture());
+        verify(orderStore, org.mockito.Mockito.atLeastOnce()).update(captor.capture());
         assertThat(captor.getAllValues()).anySatisfy(o -> {
             assertThat(o.getFilledLots()).isEqualTo(4);
             assertThat(o.getStatus()).isEqualTo(OrderStatus.PARTIALLY_FILLED);

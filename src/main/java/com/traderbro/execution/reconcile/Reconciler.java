@@ -10,6 +10,7 @@ import com.traderbro.core.event.NotificationType;
 import com.traderbro.core.event.TraderEvent;
 import com.traderbro.core.event.TraderEventPublisher;
 import com.traderbro.execution.killswitch.KillSwitch;
+import com.traderbro.execution.state.StateRecovery;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,9 +34,13 @@ public class Reconciler {
     private final boolean autoKillOnDiscrepancy;
     private final Consumer<String> alertSink;
     private final TraderEventPublisher publisher;
+    private final StateRecovery stateRecovery;
 
-    /** Runs one reconciliation pass. Returns true if consistent. */
+    /** Runs one reconciliation pass. Returns true if consistent. No-op in observe-only mode. */
     public boolean reconcile() {
+        if (stateRecovery.isObserveOnly()) {
+            return true;
+        }
         Map<String, Long> brokerShares = new HashMap<>();
         for (Position p : gateway.getPositions()) {
             brokerShares.put(p.getFigi(), p.getShares());

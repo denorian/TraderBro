@@ -82,6 +82,18 @@ public class StrategyRegistry {
                 throw new IllegalArgumentException("fastEm must be < slowEm");
             }
         }
+        if (factory.id().equals(AlligatorAoStrategy.ID)) {
+            int fast = cfg.getParams().get("fast") == null ? 5 : Integer.parseInt(cfg.getParams().get("fast"));
+            int slow = cfg.getParams().get("slow") == null ? 34 : Integer.parseInt(cfg.getParams().get("slow"));
+            int stop = cfg.getParams().get("stopLookback") == null ? 5
+                    : Integer.parseInt(cfg.getParams().get("stopLookback"));
+            if (fast >= slow) {
+                throw new IllegalArgumentException("fast must be < slow");
+            }
+            if (stop < 1) {
+                throw new IllegalArgumentException("stopLookback must be >= 1");
+            }
+        }
         // Additional per-strategy invariants may be added here.
     }
 

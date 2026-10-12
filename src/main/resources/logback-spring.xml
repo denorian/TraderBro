@@ -1,25 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- Console: human-readable, with secret masking. -->
+    <!-- Console: pg-crypto style — human-readable, colored, with request MDC context. -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-            <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{36} - %msg%n</pattern>
+            <pattern>%blue(%d{yy-MM-dd E HH:mm:ss.SSS}) %highlight(%-5p) %magenta(${PID}) %magenta(---) %cyan([%8.15t]) %blue(%-40.40logger{0}) %red([%X{requestMethod}]) %red([ %X{requestId} : %X{externalId} ]) %red(:) %msg%n</pattern>
         </encoder>
     </appender>
 
-    <!-- File: JSON lines for machine consumption. -->
+    <!-- File: JSON lines (Logstash encoder, pg-crypto style) for machine consumption. -->
     <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOGS_DIR:-logs}/traderbro.json.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
             <fileNamePattern>${LOGS_DIR:-logs}/traderbro.%d{yyyy-MM-dd}.json.log</fileNamePattern>
             <maxHistory>30</maxHistory>
         </rollingPolicy>
-        <encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
-            <layout class="ch.qos.logback.contrib.json.classic.JsonLayout">
-                <timestampFormat>yyyy-MM-dd'T'HH:mm:ss.SSSXXX</timestampFormat>
-                <appendLineSeparator>true</appendLineSeparator>
-                <includeException>true</includeException>
-            </layout>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdc>true</includeMdc>
+            <lineSeparator>&#10;</lineSeparator>
         </encoder>
     </appender>
 

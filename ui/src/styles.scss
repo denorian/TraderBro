@@ -1,0 +1,33 @@
+/* TraderBro UI — Taiga UI night theme (neutral palette, semantic accents only). */
+@import "@taiga-ui/core/styles/taiga-ui-local.less";
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--tui-base-01);
+  color: var(--tui-text-01);
+  font-family: var(--tui-font-text);
+}
+
+.trader-app {
+  min-height: 100%;
+}
+
+/* Semantic colours (profit/loss/status) — the only accents allowed. */
+.tp-profit {
+  color: var(--tui-positive);
+}
+
+.tp-loss {
+  color: var(--tui-negative);
+}
+
+/* Dark tables: subtle row hover for wide dashboards. */
+.tp-table-row:hover {
+  background: var(--tui-base-02);
+  cursor: pointer;
+}

@@ -48,7 +48,8 @@ public class FuturesRolloverWatcher {
             }
             long daysLeft = ChronoUnit.DAYS.between(today, spec.getExpirationDate());
             if (daysLeft <= properties.getRolloverDaysBefore()) {
-                String nextTicker = nextContract(inst, spec.getBasicAsset()).orElse("—");
+                String nextTicker = nextContract(inst, spec.getBasicAsset())
+                    .map(Instrument::getTicker).orElse("—");
                 Map<String, Object> payload = new HashMap<>();
                 payload.put("ticker", inst.getTicker());
                 payload.put("basicAsset", spec.getBasicAsset());

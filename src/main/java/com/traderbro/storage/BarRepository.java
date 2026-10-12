@@ -8,6 +8,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -29,7 +30,7 @@ public class BarRepository implements BarStore {
     private final int moneyScale;
     private final RowMapper<Bar> mapper;
 
-    public BarRepository(JdbcTemplate jdbc, int moneyScale) {
+    public BarRepository(JdbcTemplate jdbc, @Value("${app.money-scale}") int moneyScale) {
         this.jdbc = jdbc;
         this.named = new NamedParameterJdbcTemplate(jdbc);
         this.moneyScale = moneyScale;

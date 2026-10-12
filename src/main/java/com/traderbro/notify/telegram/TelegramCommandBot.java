@@ -55,12 +55,14 @@ public class TelegramCommandBot {
             }
         };
         var app = new org.telegram.telegrambots.longpolling.TelegramBotsLongPollingApplication();
-        // TODO: verify API — registerBot(botToken, consumer) returns the registered bot.
-        this.registration = app.registerBot(botToken, consumer);
+        try {
+            this.registration = app.registerBot(botToken, consumer);
+        } catch (org.telegram.telegrambots.meta.exceptions.TelegramApiException e) {
+            throw new IllegalStateException("telegram bot registration failed", e);
+        }
     }
 
     public void stop() {
-        // TODO: verify API — unregister/shutdown.
         if (registration != null) {
             log.info("telegram command bot stopped");
         }

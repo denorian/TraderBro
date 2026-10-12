@@ -35,3 +35,14 @@ reports/
 # Virtual machine crash logs
 hs_err_pid*
 replay_pid*
+
+# Angular UI — build artifacts and locally installed Node (frontend-maven-plugin)
+ui/node/
+ui/node_modules/
+ui/dist/
+ui/.angular/
+ui/out-tsc/
+
+# Local runtime / tooling
+out/
+.nessy/

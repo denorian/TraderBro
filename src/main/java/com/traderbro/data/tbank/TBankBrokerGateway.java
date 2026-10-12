@@ -8,35 +8,34 @@ import com.traderbro.core.domain.enums.OrderSide;
 import com.traderbro.core.domain.enums.OrderStatus;
 import com.traderbro.core.domain.enums.OrderType;
 import com.traderbro.core.domain.spi.BrokerGateway;
+import com.traderbro.data.mapper.QuotationMapper;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import ru.tinkoff.piapi.contract.v1.MoneyValue;
-import ru.tinkoff.piapi.contract.v1.PortfolioPosition;
-import ru.tinkoff.piapi.contract.v1.PortfolioResponse;
+import ru.tinkoff.piapi.contract.v1.Quotation;
+import ru.tinkoff.piapi.contract.v1.Share;
 import ru.tinkoff.piapi.core.InvestApi;
-import ru.tinkoff.piapi.core.OrdersService;
-import ru.tinkoff.piapi.core.SandboxService;
+import ru.tinkoff.piapi.core.models.Money;
+import ru.tinkoff.piapi.core.models.Portfolio;
 
 /**
- * {@link BrokerGateway} backed by the T-Bank Invest API. In sandbox mode all order calls are
- * routed to {@link SandboxService}; in live mode to {@link OrdersService}.
- *
- * <p>NOTE on SDK API: method names follow the T-Bank Java SDK and must be verified against the
- * pinned version. Each uncertain call is marked {@code // TODO: verify API}.
+ * {@link BrokerGateway} backed by the T-Bank Invest API (java-sdk-core 1.36). In sandbox mode
+ * all order calls are routed to {@link ru.tinkoff.piapi.core.SandboxService}; in live mode to
+ * {@link ru.tinkoff.piapi.core.OrdersService}. Account id is a {@code String}.
  */
 @Slf4j
 public class TBankBrokerGateway implements BrokerGateway {
 
     private final InvestApi api;
     private final boolean sandbox;
-    private final long configuredAccountId;
+    private final String configuredAccountId;
     private final int moneyScale;
-    private volatile long resolvedAccountId = -1;
+    private volatile String resolvedAccountId;
 
-    public TBankBrokerGateway(InvestApi api, boolean sandbox, long accountId, int moneyScale) {
+    public TBankBrokerGateway(InvestApi api, boolean sandbox, String accountId, int moneyScale) {
         this.api = api;
         this.sandbox = sandbox;
         this.configuredAccountId = accountId;
@@ -44,17 +43,16 @@ public class TBankBrokerGateway implements BrokerGateway {
     }
 
     /** Resolves the trading account id, opening a sandbox account on first use when needed. */
-    private long accountId() {
-        if (resolvedAccountId >= 0) {
+    private String accountId() {
+        if (resolvedAccountId != null) {
             return resolvedAccountId;
         }
-        if (configuredAccountId > 0) {
+        if (configuredAccountId != null && !configuredAccountId.isBlank()) {
             resolvedAccountId = configuredAccountId;
             return resolvedAccountId;
         }
         if (sandbox) {
-            // TODO: verify API — openSandboxAccount() returns account id (long).
-            resolvedAccountId = sandboxService().openSandboxAccount();
+            resolvedAccountId = api.getSandboxService().openAccountSync();
             log.info("opened sandbox account id={}", resolvedAccountId);
             return resolvedAccountId;
         }
@@ -67,13 +65,14 @@ public class TBankBrokerGateway implements BrokerGateway {
                 req.getSide() == OrderSide.BUY
                         ? ru.tinkoff.piapi.contract.v1.OrderDirection.ORDER_DIRECTION_BUY
                         : ru.tinkoff.piapi.contract.v1.OrderDirection.ORDER_DIRECTION_SELL;
-        // TODO: verify API — postOrder overloads and return type (PostOrderResponse).
+        Quotation price = req.getLimitPrice() == null ? Quotation.getDefaultInstance()
+                : toQuotation(req.getLimitPrice());
         ru.tinkoff.piapi.contract.v1.PostOrderResponse resp;
         if (sandbox) {
-            resp = sandboxService().postOrder(req.getFigi(), req.getLots(), req.getLimitPrice(),
+            resp = api.getSandboxService().postOrderSync(req.getFigi(), req.getLots(), price,
                     direction, accountId(), toSdkType(req.getType()), req.getClientOrderId());
         } else {
-            resp = api.getOrdersService().postOrder(req.getFigi(), req.getLots(), req.getLimitPrice(),
+            resp = api.getOrdersService().postOrderSync(req.getFigi(), req.getLots(), price,
                     direction, accountId(), toSdkType(req.getType()), req.getClientOrderId());
         }
         return new BrokerGateway.OrderResponse(resp.getOrderId(),
@@ -82,31 +81,30 @@ public class TBankBrokerGateway implements BrokerGateway {
 
     @Override
     public void cancelOrder(String brokerOrderId) {
-        // TODO: verify API — cancelOrder signature.
         if (sandbox) {
-            sandboxService().cancelOrder(accountId(), brokerOrderId);
+            api.getSandboxService().cancelOrderSync(accountId(), brokerOrderId);
         } else {
-            api.getOrdersService().cancelOrder(accountId(), brokerOrderId);
+            api.getOrdersService().cancelOrderSync(accountId(), brokerOrderId);
         }
     }
 
     @Override
     public List<Position> getPositions() {
-        // TODO: verify API — getPortfolio returns PortfolioResponse.
-        PortfolioResponse portfolio = sandbox
-                ? sandboxService().getPortfolio(accountId())
-                : api.getOperationsService().getPortfolio(accountId());
+        Portfolio portfolio = sandbox
+                ? Portfolio.fromResponse(api.getSandboxService().getPortfolioSync(accountId()))
+                : api.getOperationsService().getPortfolioSync(accountId());
         List<Position> out = new ArrayList<>();
-        for (PortfolioPosition p : portfolio.getPositionsList()) {
-            if (p.getQuantity().longValue() == 0) {
+        for (ru.tinkoff.piapi.core.models.Position p : portfolio.getPositions()) {
+            long shares = p.getQuantity().abs().longValue();
+            if (shares == 0) {
                 continue;
             }
             out.add(Position.builder()
                     .figi(p.getFigi())
-                    .lots(Math.abs(p.getQuantity().longValue()))
-                    .shares(Math.abs(p.getQuantity().longValue()))
-                    .averagePrice(fromMoney(p.getAveragePositionPrice()))
-                    .currentPrice(fromMoney(p.getCurrentPrice()))
+                    .lots(p.getQuantityLots().abs().longValue())
+                    .shares(shares)
+                    .averagePrice(money(p.getAveragePositionPrice()))
+                    .currentPrice(money(p.getCurrentPrice()))
                     .build());
         }
         return out;
@@ -114,18 +112,17 @@ public class TBankBrokerGateway implements BrokerGateway {
 
     @Override
     public List<OrderState> getOpenOrders() {
-        // TODO: verify API — getOrders returns List<OrderState>.
         List<ru.tinkoff.piapi.contract.v1.OrderState> states = sandbox
-                ? sandboxService().getOrders(accountId())
-                : api.getOrdersService().getOrders(accountId());
+                ? api.getSandboxService().getOrdersSync(accountId())
+                : api.getOrdersService().getOrdersSync(accountId());
         List<OrderState> out = new ArrayList<>();
         for (ru.tinkoff.piapi.contract.v1.OrderState s : states) {
             out.add(OrderState.builder()
                     .brokerOrderId(s.getOrderId())
                     .figi(s.getFigi())
                     .status(mapStatus(s.getExecutionReportStatus()))
-                    .filledLots(s.getLotsRequested() - s.getLotsRest())
-                    .avgFillPrice(fromQuotation(s.getAveragePositionPrice()))
+                    .filledLots(s.getLotsExecuted())
+                    .avgFillPrice(fromMoney(s.getAveragePositionPrice()))
                     .build());
         }
         return out;
@@ -137,33 +134,45 @@ public class TBankBrokerGateway implements BrokerGateway {
             log.warn("creditSandbox ignored in live mode");
             return false;
         }
-        // TODO: verify API — SandboxService.payIn signature.
-        MoneyValue mv = MoneyValue.newBuilder().setUnits(amount.longValue())
-                .setNano(amount.remainder(BigDecimal.ONE).movePointRight(9).intValue()).build();
-        sandboxService().payIn(accountId(), mv);
+        MoneyValue mv = MoneyValue.newBuilder().setCurrency("rub")
+                .setUnits(amount.longValue())
+                .setNano(amount.remainder(BigDecimal.ONE).movePointRight(9).intValue())
+                .build();
+        api.getSandboxService().payInSync(accountId(), mv);
         return true;
     }
 
     @Override
     public Optional<Instrument> instrumentByFigi(String figi) {
-        // TODO: verify API — InstrumentsService.getShareByFigi returns Share.
-        return api.getInstrumentsService().getShareByFigi(figi)
-                .map(s -> new com.traderbro.data.mapper.SdkInstrumentMapper(moneyScale).toInstrument(s));
-    }
-
-    private SandboxService sandboxService() {
-        return api.getSandboxService();
+        Share s = api.getInstrumentsService().getShareByFigiSync(figi);
+        if (s.getFigi() == null || s.getFigi().isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(new com.traderbro.data.mapper.SdkInstrumentMapper(moneyScale).toInstrument(s));
     }
 
     private BigDecimal fromMoney(MoneyValue m) {
         if (m == null || (m.getUnits() == 0 && m.getNano() == 0)) {
             return BigDecimal.ZERO;
         }
-        return com.traderbro.data.mapper.QuotationMapper.toBigDecimal(m, moneyScale);
+        return QuotationMapper.toBigDecimal(m, moneyScale);
     }
 
-    private BigDecimal fromQuotation(ru.tinkoff.piapi.contract.v1.Quotation q) {
-        return com.traderbro.data.mapper.QuotationMapper.toBigDecimal(q, moneyScale);
+    private BigDecimal money(Money m) {
+        return m == null ? BigDecimal.ZERO : m.getValue();
+    }
+
+    private BigDecimal fromQuotation(Quotation q) {
+        if (q == null || (q.getUnits() == 0 && q.getNano() == 0)) {
+            return BigDecimal.ZERO;
+        }
+        return QuotationMapper.toBigDecimal(q, moneyScale);
+    }
+
+    private static Quotation toQuotation(BigDecimal v) {
+        long units = v.longValue();
+        int nano = v.subtract(BigDecimal.valueOf(units)).movePointRight(9).intValue();
+        return Quotation.newBuilder().setUnits(units).setNano(nano).build();
     }
 
     private static ru.tinkoff.piapi.contract.v1.OrderType toSdkType(OrderType type) {

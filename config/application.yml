@@ -3,14 +3,16 @@
 # Secrets (TBANK_TOKEN, TB_API_KEY) are read from environment variables only.
 
 app:
-  sandbox: true
+  sandbox: ${APP_SANDBOX:true}
+  account-id: ${APP_ACCOUNT_ID:}
+  observe-only: ${APP_OBSERVE_ONLY:false}
 
 tbank:
   token-env: TBANK_TOKEN
   timeout: 10s
 
 instruments:
-  tickers: [SBER, GAZP, LKOH, YDEX, VTBR]
+  tickers: [SBER, GAZP, LKOH, YDEX, VTBR, T, PLZL, NVTK, ROSN, TATN, GMKN, MOEX, X5]
 
 risk:
   daily-loss-limit-pct: 0.02
@@ -20,10 +22,30 @@ risk:
 execution:
   order-ttl: 60s
 
+indicators:
+  alligator:
+    jaw-period: 13
+    jaw-shift: 8
+    teeth-period: 8
+    teeth-shift: 5
+    lips-period: 5
+    lips-shift: 3
+    atr-period: 14
+    entanglement-atr-threshold: 0.5
+  awesome-oscillator:
+    fast: 5
+    slow: 34
+  snapshot-retention-days: 90
+  snapshot-timeframes: [FIFTEEN_MIN, ONE_HOUR, ONE_DAY]
+
+ui:
+  enabled: true
+  poll-interval-ms: 10000
+  chart-default-bars: 500
+  build-profile: build-ui
+
 spring:
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:5432/${POSTGRES_DB:traderbro}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:traderbro}
     username: ${POSTGRES_USER:traderbro}
     password: ${POSTGRES_PASSWORD:traderbro}
-  liquibase:
-    change-log: classpath:db/changelog/db.changelog-master.sql

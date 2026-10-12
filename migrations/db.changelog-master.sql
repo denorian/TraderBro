@@ -1,10 +1,5 @@
 --liquibase formatted sql
 
--- ============================================================================
--- TraderBro — schema (Liquibase formatted SQL)
--- Changeset ids follow the convention YYYYMMDD-N.
--- ============================================================================
-
 --changeset a.s.brovko:20260913-1
 --comment Enable TimescaleDB extension for the bars hypertable.
 CREATE EXTENSION IF NOT EXISTS timescaledb;
@@ -186,3 +181,11 @@ CREATE INDEX idx_notifications_status ON notifications (status, created_at);
 --comment Stage 2: instrument type recorded on backtest runs.
 ALTER TABLE backtest_runs ADD COLUMN instrument_type VARCHAR(16) NOT NULL DEFAULT 'SHARE';
 --rollback ALTER TABLE backtest_runs DROP COLUMN instrument_type;
+
+--changeset a.s.brovko:20260916-1
+--comment Widen instrument board column: SDK board values (exchange/realExchange) exceed varchar(32).
+ALTER TABLE instruments ALTER COLUMN board TYPE VARCHAR(128);
+--rollback ALTER TABLE instruments ALTER COLUMN board TYPE VARCHAR(32);
+
+-- Stage 3: indicator snapshots (YAML changeset, id YYYYMMDD-N convention).
+--include file="db.changelog-indicators.yaml" relativeToChangelogFile=true

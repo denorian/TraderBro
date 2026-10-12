@@ -9,8 +9,9 @@ import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseStrategy;
 import org.ta4j.core.Rule;
 import org.ta4j.core.Strategy;
-import org.ta4j.core.indicators.BollingerBandsLowerIndicator;
-import org.ta4j.core.indicators.BollingerBandsMiddleIndicator;
+import org.ta4j.core.indicators.averages.SMAIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsLowerIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsMiddleIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.rules.CrossedDownIndicatorRule;
 import org.ta4j.core.rules.CrossedUpIndicatorRule;
@@ -43,9 +44,9 @@ public class BollingerMeanReversionStrategy extends AbstractTradingStrategy {
 
         ClosePriceIndicator close = new ClosePriceIndicator(series);
         BollingerBandsMiddleIndicator middle = new BollingerBandsMiddleIndicator(
-                new org.ta4j.core.indicators.SMAIndicator(close, period));
+                new SMAIndicator(close, period));
         BollingerBandsLowerIndicator lower =
-                new BollingerBandsLowerIndicator(middle, close, period, series.numFactory().numOf(k));
+                new BollingerBandsLowerIndicator(middle, close, series.numFactory().numOf(k));
 
         Rule entry = new CrossedDownIndicatorRule(close, lower);
         Rule revert = new CrossedUpIndicatorRule(close, middle);
@@ -66,9 +67,9 @@ public class BollingerMeanReversionStrategy extends AbstractTradingStrategy {
 
         ClosePriceIndicator close = new ClosePriceIndicator(series);
         BollingerBandsMiddleIndicator middle = new BollingerBandsMiddleIndicator(
-                new org.ta4j.core.indicators.SMAIndicator(close, period));
+                new SMAIndicator(close, period));
         BollingerBandsLowerIndicator lower =
-                new BollingerBandsLowerIndicator(middle, close, period, series.numFactory().numOf(k));
+                new BollingerBandsLowerIndicator(middle, close, series.numFactory().numOf(k));
 
         if (!SeriesFactory.isPresent(close, last) || !SeriesFactory.isPresent(lower, last)) {
             return Optional.empty();

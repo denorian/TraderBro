@@ -1,7 +1,7 @@
 package com.traderbro.storage;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import com.traderbro.core.event.NotificationLevel;
 import com.traderbro.core.event.NotificationType;
 import com.traderbro.notify.NotificationRecord;
@@ -73,8 +73,7 @@ public class NotificationRepository implements NotificationStore {
 
     @Override
     public List<NotificationRecord> findPendingForRetry(int maxAttempts, int limit) {
-        return jdbc.query("""
-                SELECT """ + COLS + """
+        return jdbc.query("SELECT " + COLS + """
                  FROM notifications
                  WHERE status IN ('PENDING','FAILED') AND attempts < ?
                  ORDER BY created_at

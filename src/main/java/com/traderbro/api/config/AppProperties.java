@@ -12,6 +12,10 @@ public class AppProperties {
 
     /** Sandbox mode. When false, live-trading ACK env is required at startup. */
     private boolean sandbox = true;
+    /** Trading account id. Required in live mode; ignored (blank) in sandbox. */
+    private String accountId = "";
+    /** Signals-only mode: compute/publish signals but never place orders. */
+    private boolean observeOnly = false;
     /** Monetary scale for all trading money math (default 4). */
     private int moneyScale = 4;
     /** Max bars retained in memory for indicator windows (default 500). */

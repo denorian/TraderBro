@@ -93,16 +93,22 @@ public class SignalEngine {
             return;
         }
         Signal raw = maybe.get();
-        signalRepository.insert(raw);
-
-        if (stateRecovery.isObserveOnly()) {
-            log.info("observe-only: signal {} for {} not acted on", cfg.getId(), figi);
+        // Shorts are allowed on futures contracts only (stage-3 invariant).
+        if (raw.getDirection() == com.traderbro.core.domain.enums.Direction.SHORT && !instrument.isFuture()) {
+            log.info("skip SHORT signal for {} (not a futures contract)", figi);
             return;
         }
+        signalRepository.insert(raw);
+
         if (raw.getVerdict() != SignalVerdict.ACCEPTED) {
             log.info("signal {} for {} verdict={} reason={}", cfg.getId(), figi,
                     raw.getVerdict(), raw.getReason());
             publishSignalRejected(cfg, instrument, raw.getVerdict().name(), raw.getReason());
+            return;
+        }
+        if (stateRecovery.isObserveOnly()) {
+            log.info("observe-only: signal {} for {} — signal only, no order", cfg.getId(), figi);
+            publishObserveOnlySignal(cfg, instrument, raw);
             return;
         }
         submitOrder(cfg, instrument, raw);
@@ -121,6 +127,33 @@ public class SignalEngine {
                 NotificationLevel.INFO, payload));
     }
 
+    /** In observe-only mode: notify the signal but never place an order. */
+    private void publishObserveOnlySignal(StrategyConfig cfg, Instrument instrument, Signal signal) {
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("ticker", instrument.getTicker());
+        payload.put("strategy", cfg.getId());
+        payload.put("dirMark", dirMark(signal.getDirection()));
+        payload.put("typeLabel", instrument.isFuture()
+                ? "фьючерс, " + instrument.getFutureSpec().getBasicAsset() : "акция");
+        payload.put("price", signal.getPrice());
+        payload.put("indicators", snapshotString(signal));
+        try {
+            Portfolio portfolio = portfolioProvider.snapshot();
+            PositionSizer.SizingResult sizing = positionSizer.size(cfg.getMaxPositionPct(),
+                    instrument, signal.getPrice(), portfolio);
+            payload.put("qty", sizing.getLots());
+            payload.put("qtyUnit", instrument.isFuture() ? "контр." : "лот");
+            payload.put("notional", sizing.getNotional());
+            payload.put("pct", sizing.getEffectivePct().movePointRight(2)
+                    .setScale(1, java.math.RoundingMode.HALF_UP));
+        } catch (Exception e) {
+            log.warn("observe-only: sizing skipped for {}: {}", signal.getFigi(), e.getMessage());
+        }
+        payload.put("note", "сигнал без торговли (observe-only)");
+        publisher.publish(TraderEvent.of(NotificationType.SIGNAL_ENTRY,
+                NotificationLevel.INFO, payload));
+    }
+
     private void submitOrder(StrategyConfig cfg, Instrument instrument, Signal signal) {
         Portfolio portfolio = portfolioProvider.snapshot();
         PositionSizer.SizingResult sizing = positionSizer.size(cfg.getMaxPositionPct(),
@@ -131,7 +164,8 @@ public class SignalEngine {
         }
         OrderRequest req = OrderRequest.builder()
                 .figi(signal.getFigi())
-                .side(OrderSide.BUY)
+                .side(signal.getDirection() == com.traderbro.core.domain.enums.Direction.SHORT
+                        ? OrderSide.SELL : OrderSide.BUY)
                 .type(cfg.getOrderType())
                 .lots(sizing.getLots())
                 .limitPrice(signal.getPrice())
@@ -148,7 +182,7 @@ public class SignalEngine {
         java.util.Map<String, Object> payload = new java.util.HashMap<>();
         payload.put("ticker", instrument.getTicker());
         payload.put("strategy", cfg.getId());
-        payload.put("dirMark", "📈 LONG");
+        payload.put("dirMark", dirMark(signal.getDirection()));
         payload.put("typeLabel", instrument.isFuture() ? "фьючерс, " + instrument.getFutureSpec().getBasicAsset() : "акция");
         payload.put("price", signal.getPrice());
         payload.put("qty", sizing.getLots());
@@ -171,5 +205,9 @@ public class SignalEngine {
             sb.append(k).append("=").append(v);
         });
         return sb.length() == 0 ? "—" : sb.toString();
+    }
+
+    private String dirMark(com.traderbro.core.domain.enums.Direction direction) {
+        return direction == com.traderbro.core.domain.enums.Direction.SHORT ? "📉 SHORT" : "📈 LONG";
     }
 }

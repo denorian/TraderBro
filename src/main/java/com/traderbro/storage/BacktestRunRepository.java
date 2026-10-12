@@ -1,6 +1,7 @@
 package com.traderbro.storage;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import com.traderbro.core.backtest.BacktestMetrics;
 import com.traderbro.core.backtest.BacktestReport;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -67,7 +68,7 @@ public class BacktestRunRepository {
                 .from(rs.getTimestamp("from_ts").toInstant())
                 .to(rs.getTimestamp("to_ts").toInstant())
                 .params(fromMap(rs.getString("params")))
-                .metrics(fromMap(rs.getString("metrics")))
+                .metrics(fromMetrics(rs.getString("metrics")))
                 .codeVersion(rs.getString("code_version"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .barsCount(rs.getLong("bars_count"))
@@ -84,12 +85,23 @@ public class BacktestRunRepository {
         }
     }
 
+    private BacktestMetrics fromMetrics(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, BacktestMetrics.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private java.util.Map<String, String> fromMap(String json) {
         if (json == null) {
             return java.util.Map.of();
         }
         try {
-            var raw = objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<
+            var raw = objectMapper.readValue(json, new tools.jackson.core.type.TypeReference<
                     java.util.Map<String, Object>>() {
             });
             java.util.Map<String, String> out = new java.util.HashMap<>();

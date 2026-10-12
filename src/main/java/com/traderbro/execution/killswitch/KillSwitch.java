@@ -1,5 +1,6 @@
 package com.traderbro.execution.killswitch;
 
+import com.traderbro.core.domain.spi.KillSwitchStatusProvider;
 import com.traderbro.core.event.NotificationLevel;
 import com.traderbro.core.event.NotificationType;
 import com.traderbro.core.event.TraderEvent;
@@ -19,7 +20,7 @@ import lombok.extern.slf4j.Slf4j;
  * orders) through the {@code onActivate} callback wired in the composition root.
  */
 @Slf4j
-public class KillSwitch {
+public class KillSwitch implements KillSwitchStatusProvider {
 
     private volatile boolean active = false;
     private volatile String reason = null;

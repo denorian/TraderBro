@@ -3,6 +3,8 @@
 
 app:
   sandbox: ${APP_SANDBOX:true}                 # live trading requires TRADING_LIVE_ACK env
+  account-id: ${APP_ACCOUNT_ID:}               # required in live mode (blank = auto/open sandbox)
+  observe-only: ${APP_OBSERVE_ONLY:false}      # signals-only: publish signals, never place orders
   money-scale: 4
   max-bars-in-memory: 500
   indicator-threads: 4
@@ -21,7 +23,7 @@ tbank:
     initial-backoff: 500ms
 
 instruments:
-  tickers: [SBER, GAZP, LKOH, YDEX, VTBR]
+  tickers: [SBER, GAZP, LKOH, YDEX, VTBR, T, PLZL, NVTK, ROSN, TATN, GMKN, MOEX, X5]
 
 strategies:
   SmaCrossStrategy:
@@ -45,6 +47,42 @@ strategies:
       rsiMax: "70"
       atrPeriod: "14"
       atrMult: "2"
+  AlligatorAoStrategy:
+    enabled: ${ALLIGATOR_AO_ENABLED:true}
+    interval: ONE_HOUR
+    order-type: LIMIT
+    max-position-pct: 0.10
+    params:
+      fast: "5"
+      slow: "34"
+      entanglementAtrThreshold: "0.5"
+      stopLookback: "5"
+      allowShort: "true"
+      atrPeriod: "14"
+
+indicators:
+  alligator:
+    jaw-period: 13
+    jaw-shift: 8
+    teeth-period: 8
+    teeth-shift: 5
+    lips-period: 5
+    lips-shift: 3
+    atr-period: 14
+    entanglement-atr-threshold: 0.5
+  awesome-oscillator:
+    fast: 5
+    slow: 34
+  snapshot-retention-days: 90
+  snapshot-timeframes: [FIFTEEN_MIN, ONE_HOUR, ONE_DAY]
+  catch-up-ms: 300000
+  retention-cron: "0 15 3 * * *"
+
+ui:
+  enabled: true
+  poll-interval-ms: 10000
+  chart-default-bars: 500
+  build-profile: build-ui
 
 risk:
   daily-loss-limit-pct: 0.02
@@ -64,7 +102,9 @@ execution:
 
 futures:
   enabled: true
-  basic-assets: [IMOEX, Si, BR]
+  # Basic assets matched against the SDK's Future.basicAsset. IMOEX corresponds to the
+  # MIX contract (MOEX index futures); the traded ticker differs from the basic asset.
+  basic-assets: [IMOEX, BR, GOLD, CR]
   min-days-to-expiry: 7
   rollover-days-before: 5
   no-new-positions-days-before-expiry: 2
@@ -94,12 +134,9 @@ spring:
   application:
     name: traderbro
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:5432/${POSTGRES_DB:traderbro}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:traderbro}
     username: ${POSTGRES_USER:traderbro}
     password: ${POSTGRES_PASSWORD:traderbro}
-  liquibase:
-    enabled: true
-    change-log: classpath:db/changelog/db.changelog-master.sql
 
 management:
   endpoints:

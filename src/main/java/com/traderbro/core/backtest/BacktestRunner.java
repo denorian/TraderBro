@@ -67,9 +67,9 @@ public class BacktestRunner {
                     double proceeds = qty * openPrice;
                     double fee = proceeds * commissionPct.doubleValue();
                     equity += proceeds - fee;
-                    record.operate(i, DecimalNum.valueOf(openPrice));
-                    trades.add(new BacktestTrade(open.entryBar(), open.entryEquity(), equity,
-                            (long) i - open.entryBar()));
+                    record.operate(i, DecimalNum.valueOf(openPrice), DecimalNum.valueOf(qty));
+                    trades.add(new BacktestTrade(open.getEntryBar(), open.getEntryEquity(), equity,
+                            (long) i - open.getEntryBar()));
                     open = null;
                     qty = 0.0;
                 } else if (entrySig && !inPos) {
@@ -81,7 +81,7 @@ public class BacktestRunner {
                         double cost = qty * openPrice;
                         double fee = cost * commissionPct.doubleValue();
                         equity -= cost + fee;
-                        record.operate(i, DecimalNum.valueOf(openPrice));
+                        record.operate(i, DecimalNum.valueOf(openPrice), DecimalNum.valueOf(qty));
                         open = new BacktestTrade(i, equity, 0.0, 0);
                     }
                 }
@@ -92,8 +92,8 @@ public class BacktestRunner {
         if (open != null) {
             double lastClose = series.getLastBar().getClosePrice().doubleValue();
             equity += qty * lastClose;
-            trades.add(new BacktestTrade(open.entryBar(), open.entryEquity(), equity,
-                    (long) end - open.entryBar()));
+            trades.add(new BacktestTrade(open.getEntryBar(), open.getEntryEquity(), equity,
+                    (long) end - open.getEntryBar()));
         }
 
         double buyAndHold = buyAndHoldReturn(series, initialCapital, commissionPct, slippageBps);
@@ -149,9 +149,9 @@ public class BacktestRunner {
                     double pnl = (exitPrice - entryPrice) * pointValue * contracts;
                     double fee = contracts * feePerContract.doubleValue();
                     equity += pnl - fee;
-                    record.operate(i, DecimalNum.valueOf(exitPrice));
-                    trades.add(new BacktestTrade(open.entryBar(), open.entryEquity(), equity,
-                            (long) i - open.entryBar()));
+                    record.operate(i, DecimalNum.valueOf(exitPrice), DecimalNum.valueOf(contracts));
+                    trades.add(new BacktestTrade(open.getEntryBar(), open.getEntryEquity(), equity,
+                            (long) i - open.getEntryBar()));
                     contracts = 0;
                 } else if (entrySig && !inPos) {
                     double exec = raw + tick * slippageTicks;
@@ -161,7 +161,7 @@ public class BacktestRunner {
                         contracts = c;
                         entryPrice = exec;
                         equity -= contracts * feePerContract.doubleValue();
-                        record.operate(i, DecimalNum.valueOf(exec));
+                        record.operate(i, DecimalNum.valueOf(exec), DecimalNum.valueOf(contracts));
                         open = new BacktestTrade(i, equity, 0.0, 0);
                     }
                 }
@@ -176,8 +176,8 @@ public class BacktestRunner {
             double lastClose = series.getLastBar().getClosePrice().doubleValue();
             double pnl = (lastClose - entryPrice) * pointValue * contracts;
             equity += pnl;
-            trades.add(new BacktestTrade(open.entryBar(), open.entryEquity(), equity,
-                    (long) end - open.entryBar()));
+            trades.add(new BacktestTrade(open.getEntryBar(), open.getEntryEquity(), equity,
+                    (long) end - open.getEntryBar()));
         }
 
         double buyAndHold = buyAndHoldReturnFutures(series, initialCapital, feePerContract, slippageTicks, spec);

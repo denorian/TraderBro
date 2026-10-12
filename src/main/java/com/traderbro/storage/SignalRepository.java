@@ -1,6 +1,6 @@
 package com.traderbro.storage;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.traderbro.core.domain.Signal;
 import com.traderbro.core.domain.enums.SignalVerdict;
 import java.sql.ResultSet;
@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -28,7 +29,7 @@ public class SignalRepository {
     private final int moneyScale;
     private final RowMapper<Signal> mapper;
 
-    public SignalRepository(JdbcTemplate jdbc, ObjectMapper objectMapper, int moneyScale) {
+    public SignalRepository(JdbcTemplate jdbc, ObjectMapper objectMapper, @Value("${app.money-scale}") int moneyScale) {
         this.jdbc = jdbc;
         this.named = new NamedParameterJdbcTemplate(jdbc);
         this.objectMapper = objectMapper;
@@ -96,7 +97,7 @@ public class SignalRepository {
                 return Map.of();
             }
             try {
-                return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<>() {
+                return objectMapper.readValue(json, new tools.jackson.core.type.TypeReference<>() {
                 });
             } catch (Exception e) {
                 return Map.of();

@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-traderbro}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-traderbro}
     ports:
-      - "5432:5432"
+      - "25432:5432"
     volumes:
       - timescaledb-data:/var/lib/postgresql/data
     healthcheck:
@@ -16,26 +16,24 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
-    build: .
-    container_name: traderbro-app
+  # Applies Liquibase migrations before the app starts.
+  # Equivalent to: scripts/migrate.sh
+  migrate:
+    image: liquibase/liquibase:${LIQUIBASE_VERSION:-4.31.1}
+    container_name: traderbro-migrate
     depends_on:
       timescaledb:
         condition: service_healthy
+    volumes:
+      - ./migrations:/liquibase/changelog
     environment:
-      TBANK_TOKEN: ${TBANK_TOKEN:?TBANK_TOKEN must be set}
-      TB_API_KEY: ${TB_API_KEY:?TB_API_KEY must be set}
-      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-      POSTGRES_HOST: timescaledb
-      POSTGRES_DB: ${POSTGRES_DB:-traderbro}
-      POSTGRES_USER: ${POSTGRES_USER:-traderbro}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-traderbro}
-      TRADING_LIVE_ACK: ${TRADING_LIVE_ACK:-}
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
+      LIQUIBASE_COMMAND_URL: jdbc:postgresql://timescaledb:5432/${POSTGRES_DB:-traderbro}
+      LIQUIBASE_COMMAND_USERNAME: ${POSTGRES_USER:-traderbro}
+      LIQUIBASE_COMMAND_PASSWORD: ${POSTGRES_PASSWORD:-traderbro}
+      LIQUIBASE_COMMAND_CHANGELOG_FILE: db.changelog-master.sql
+      LIQUIBASE_SEARCH_PATH: /liquibase/changelog
+    command: update
+    restart: "no"
 
 volumes:
   timescaledb-data:

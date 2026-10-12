@@ -18,19 +18,29 @@ public class StateRecovery {
     private final BrokerGateway gateway;
     private final OrderStore orderStore;
     private final PositionLedger ledger;
+    private final boolean forceObserveOnly;
     private final AtomicBoolean observeOnly = new AtomicBoolean(false);
     private final AtomicBoolean recovered = new AtomicBoolean(false);
 
-    public StateRecovery(BrokerGateway gateway, OrderStore orderStore, PositionLedger ledger) {
+    public StateRecovery(BrokerGateway gateway, OrderStore orderStore, PositionLedger ledger,
+                         boolean forceObserveOnly) {
         this.gateway = gateway;
         this.orderStore = orderStore;
         this.ledger = ledger;
+        this.forceObserveOnly = forceObserveOnly;
     }
 
     /**
-     * Runs recovery at startup. Must be invoked once after all beans are wired.
+     * Runs recovery at startup. Must be invoked once after all beans are wired. When
+     * observe-only is forced by configuration, reconciliation with the broker is skipped.
      */
     public synchronized void recover() {
+        if (forceObserveOnly) {
+            observeOnly.set(true);
+            recovered.set(true);
+            log.info("StateRecovery: observe-only forced by config; reconciliation skipped");
+            return;
+        }
         try {
             var internalOrders = orderStore.findOpen();
             var brokerOrders = gateway.getOpenOrders();
@@ -58,7 +68,9 @@ public class StateRecovery {
 
     /** True when the engine must not place orders (observe-only). */
     public boolean isObserveOnly() {
-        return observeOnly.get();
+        // Config-forced flag is final and true from construction, so callers (scheduled
+        // tasks) never observe a transient false before recover() runs.
+        return forceObserveOnly || observeOnly.get();
     }
 
     public boolean isRecovered() {

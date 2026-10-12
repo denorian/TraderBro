@@ -16,28 +16,30 @@ import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 import ru.tinkoff.piapi.contract.v1.Future;
 import ru.tinkoff.piapi.contract.v1.HistoricCandle;
+import ru.tinkoff.piapi.contract.v1.MarketDataResponse;
 import ru.tinkoff.piapi.contract.v1.Share;
+import ru.tinkoff.piapi.contract.v1.SubscriptionInterval;
 import ru.tinkoff.piapi.core.InvestApi;
+import ru.tinkoff.piapi.core.InstrumentsService;
 import ru.tinkoff.piapi.core.MarketDataService;
-import ru.tinkoff.piapi.core.MarketDataStreamService;
+import ru.tinkoff.piapi.core.stream.MarketDataStreamService;
+import ru.tinkoff.piapi.core.stream.MarketDataSubscriptionService;
+import ru.tinkoff.piapi.core.stream.StreamProcessor;
 
 /**
- * {@link MarketDataProvider} backed by the T-Bank Invest API.
+ * {@link MarketDataProvider} backed by the T-Bank Invest API (java-sdk-core 1.36).
  *
  * <p>Retries apply only to read operations. Stream reconnection uses exponential backoff
  * (max {@link #MAX_RECONNECT_ATTEMPTS}); after exhausting attempts the subscription is marked
- * degraded and surfaced via {@code ComponentStatus}.
- *
- * <p>NOTE on SDK API: method names below follow the T-Bank Java SDK and must be verified
- * against the pinned version. Each uncertain call is marked {@code // TODO: verify API}.
+ * degraded.
  */
 @Slf4j
 public class TBankMarketDataProvider implements MarketDataProvider {
 
     static final int MAX_RECONNECT_ATTEMPTS = 5;
 
-    private final InvestApi api;
     private final MarketDataService marketDataService;
+    private final InstrumentsService instrumentsService;
     private final MarketDataStreamService streamService;
     private final SdkBarMapper barMapper;
     private final SdkInstrumentMapper instrumentMapper;
@@ -45,12 +47,13 @@ public class TBankMarketDataProvider implements MarketDataProvider {
     private final RetryPolicy retryPolicy;
     private final AtomicBoolean degraded = new AtomicBoolean(false);
     private final List<StreamSubscriptionImpl> subscriptions = new ArrayList<>();
+    private final java.util.concurrent.atomic.AtomicInteger streamIdCounter = new java.util.concurrent.atomic.AtomicInteger();
 
     public TBankMarketDataProvider(InvestApi api, SdkBarMapper barMapper,
                                    SdkInstrumentMapper instrumentMapper,
                                    int historyMaxCandles, RetryPolicy retryPolicy) {
-        this.api = api;
         this.marketDataService = api.getMarketDataService();
+        this.instrumentsService = api.getInstrumentsService();
         this.streamService = api.getMarketDataStreamService();
         this.barMapper = barMapper;
         this.instrumentMapper = instrumentMapper;
@@ -63,8 +66,7 @@ public class TBankMarketDataProvider implements MarketDataProvider {
         List<Bar> result = new ArrayList<>();
         for (HistoryChunker.Chunk chunk : HistoryChunker.chunk(from, to, interval, historyMaxCandles)) {
             List<HistoricCandle> candles = withRetry(() ->
-                    // TODO: verify API — getCandles(figi, from, to, interval) signature.
-                    marketDataService.getCandles(figi, chunk.start(), chunk.end(), toSdk(interval)),
+                    marketDataService.getCandlesSync(figi, chunk.start(), chunk.end(), toSdk(interval)),
                     "getHistory." + figi);
             for (HistoricCandle c : candles) {
                 if (c.getIsComplete()) {
@@ -89,20 +91,23 @@ public class TBankMarketDataProvider implements MarketDataProvider {
             return;
         }
         try {
-            // TODO: verify API — sandbox market data uses a dedicated stream service.
-            // In sandbox mode use api.getSandboxMarketDataStreamService() instead.
-            ru.tinkoff.piapi.core.StreamService<ru.tinkoff.piapi.contract.v1.StreamCandle> candleStream =
-                    streamService.getCandlesStream();
-            candleStream.subscribe(c -> {
+            StreamProcessor<MarketDataResponse> processor = response -> {
                 sub.connected.set(true);
-                onBar.accept(barMapper.toBar(c.getCandle(), interval));
-            });
-            // TODO: verify API — subscription initiation call name and parameters.
-            streamService.subscribeCandles(sub.figis, toSdk(interval));
-            sub.setStream(candleStream);
-            degraded.set(false);
+                degraded.set(false);
+                if (response.hasCandle()) {
+                    sub.onBar.accept(barMapper.toBar(response.getCandle(), sub.interval));
+                }
+            };
+            String streamId = "candles-" + streamIdCounter.incrementAndGet();
+            MarketDataSubscriptionService subscription =
+                    streamService.newStream(streamId, processor, err -> {
+                        log.warn("candle stream error: {}", err.getMessage());
+                        sub.connected.set(false);
+                    });
+            subscription.subscribeCandles(sub.figis, toSubscriptionInterval(sub.interval));
+            sub.setSubscription(subscription);
             sub.connected.set(true);
-            log.info("Subscribed candles for {} (attempt {})", sub.figis, attempt + 1);
+            log.info("Subscribed candles for {} at {} (attempt {})", sub.figis, sub.interval, attempt + 1);
         } catch (RuntimeException e) {
             sub.connected.set(false);
             if (attempt < MAX_RECONNECT_ATTEMPTS) {
@@ -126,10 +131,7 @@ public class TBankMarketDataProvider implements MarketDataProvider {
     @Override
     public List<Instrument> findInstruments(List<String> tickers) {
         List<Instrument> result = new ArrayList<>();
-        List<Share> shares = withRetry(() ->
-                        // TODO: verify API — getShares() returns List<Share>.
-                        api.getInstrumentsService().getShares(),
-                "findInstruments.shares");
+        List<Share> shares = withRetry(instrumentsService::getTradableSharesSync, "findInstruments.shares");
         for (Share s : shares) {
             if (tickers.contains(s.getTicker())) {
                 result.add(instrumentMapper.toInstrument(s));
@@ -141,35 +143,23 @@ public class TBankMarketDataProvider implements MarketDataProvider {
     /**
      * Loads futures from the broker reference service and selects the nearest eligible
      * contract per requested basic asset.
-     *
-     * @param basicAssets    underlying codes, e.g. [IMOEX, Si, BR]
-     * @param minDaysToExpiry skip contracts expiring within this many days
      */
     public List<Instrument> findFutures(List<String> basicAssets, int minDaysToExpiry) {
-        List<Instrument> all = new ArrayList<>();
-        List<Future> futures = withRetry(() ->
-                        // TODO: verify API — getFutures() returns List<Future>.
-                        api.getInstrumentsService().getFutures(),
-                "findFutures.list");
-        for (Future f : futures) {
-            if (f.getForiClassFlag() || f.getBlockedTcaFlag()) {
-                continue;
-            }
-            all.add(instrumentMapper.toInstrument(f));
-        }
+        List<Instrument> all = futuresFor(basicAssets);
         return com.traderbro.core.futures.FuturesContractSelector
                 .selectNearest(all, basicAssets, java.time.LocalDate.now(), minDaysToExpiry);
     }
 
     /** All futures for the requested basic assets (no nearest-contract selection). */
     public List<Instrument> findAllFutures(List<String> basicAssets) {
+        return futuresFor(basicAssets);
+    }
+
+    private List<Instrument> futuresFor(List<String> basicAssets) {
         List<Instrument> all = new ArrayList<>();
-        List<Future> futures = withRetry(() ->
-                        // TODO: verify API — getFutures() returns List<Future>.
-                        api.getInstrumentsService().getFutures(),
-                "findFutures.all");
+        List<Future> futures = withRetry(instrumentsService::getTradableFuturesSync, "findFutures.list");
         for (Future f : futures) {
-            if (f.getForiClassFlag() || f.getBlockedTcaFlag()) {
+            if (f.getBlockedTcaFlag()) {
                 continue;
             }
             Instrument inst = instrumentMapper.toInstrument(f);
@@ -219,8 +209,7 @@ public class TBankMarketDataProvider implements MarketDataProvider {
         }
     }
 
-    /** Maps domain interval to SDK interval. */
-    // TODO: verify API — SDK CandleInterval enum constant names.
+    /** Maps domain interval to the historical-request interval enum. */
     static ru.tinkoff.piapi.contract.v1.CandleInterval toSdk(CandleInterval interval) {
         return switch (interval) {
             case ONE_MIN -> ru.tinkoff.piapi.contract.v1.CandleInterval.CANDLE_INTERVAL_1_MIN;
@@ -231,30 +220,42 @@ public class TBankMarketDataProvider implements MarketDataProvider {
         };
     }
 
-    /** Internal subscription handle. */
+    /** Maps domain interval to the stream-subscription interval enum. */
+    static SubscriptionInterval toSubscriptionInterval(CandleInterval interval) {
+        return switch (interval) {
+            case ONE_MIN -> SubscriptionInterval.SUBSCRIPTION_INTERVAL_ONE_MINUTE;
+            case FIVE_MIN -> SubscriptionInterval.SUBSCRIPTION_INTERVAL_FIVE_MINUTES;
+            case FIFTEEN_MIN -> SubscriptionInterval.SUBSCRIPTION_INTERVAL_FIFTEEN_MINUTES;
+            case ONE_HOUR -> SubscriptionInterval.SUBSCRIPTION_INTERVAL_ONE_HOUR;
+            case ONE_DAY -> SubscriptionInterval.SUBSCRIPTION_INTERVAL_ONE_DAY;
+        };
+    }
+
+    /** Internal subscription handle wrapping a {@link MarketDataSubscriptionService}. */
     private static final class StreamSubscriptionImpl implements StreamSubscription {
         final List<String> figis;
         final CandleInterval interval;
+        final Consumer<Bar> onBar;
         final AtomicBoolean cancelled = new AtomicBoolean(false);
         final AtomicBoolean connected = new AtomicBoolean(false);
-        volatile ru.tinkoff.piapi.core.StreamService<ru.tinkoff.piapi.contract.v1.StreamCandle> stream;
+        volatile MarketDataSubscriptionService subscription;
 
         StreamSubscriptionImpl(List<String> figis, CandleInterval interval, Consumer<Bar> onBar) {
             this.figis = figis;
             this.interval = interval;
+            this.onBar = onBar;
         }
 
-        void setStream(ru.tinkoff.piapi.core.StreamService<ru.tinkoff.piapi.contract.v1.StreamCandle> s) {
-            this.stream = s;
+        void setSubscription(MarketDataSubscriptionService subscription) {
+            this.subscription = subscription;
         }
 
         @Override
         public void cancel() {
             if (cancelled.compareAndSet(false, true)) {
                 connected.set(false);
-                if (stream != null) {
-                    // TODO: verify API — StreamService.unsubscribe() name.
-                    stream.unsubscribe();
+                if (subscription != null) {
+                    subscription.cancel();
                 }
             }
         }

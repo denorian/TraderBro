@@ -3,6 +3,7 @@ package com.traderbro.api.config;
 import com.traderbro.api.service.BacktestService;
 import com.traderbro.api.service.PortfolioService;
 import com.traderbro.core.backtest.BacktestRunner;
+import com.traderbro.core.domain.Instrument;
 import com.traderbro.core.domain.StrategyConfig;
 import com.traderbro.core.domain.enums.CandleInterval;
 import com.traderbro.core.domain.enums.OrderType;
@@ -24,6 +25,9 @@ import com.traderbro.core.risk.RiskConfig;
 import com.traderbro.core.risk.RiskGate;
 import com.traderbro.core.risk.RiskRule;
 import com.traderbro.core.risk.TradingWindowRule;
+import com.traderbro.core.indicators.IndicatorFactory;
+import com.traderbro.core.indicators.IndicatorSnapshotService;
+import com.traderbro.core.strategies.AlligatorAoStrategy;
 import com.traderbro.core.strategies.BollingerMeanReversionStrategy;
 import com.traderbro.core.strategies.DonchianBreakoutStrategy;
 import com.traderbro.core.strategies.EmaMomentumStrategy;
@@ -45,8 +49,10 @@ import com.traderbro.execution.killswitch.KillSwitch;
 import com.traderbro.execution.order.OrderManager;
 import com.traderbro.execution.reconcile.Reconciler;
 import com.traderbro.execution.state.StateRecovery;
+import com.traderbro.notify.LifecycleNotifier;
 import com.traderbro.notify.NotificationService;
 import com.traderbro.notify.NotificationStore;
+import com.traderbro.notify.telegram.TelegramProperties;
 import com.traderbro.scheduler.FuturesRolloverWatcher;
 import com.traderbro.scheduler.InstrumentRefreshScheduler;
 import com.traderbro.scheduler.PortfolioSnapshotScheduler;
@@ -62,6 +68,7 @@ import com.traderbro.storage.SignalRepository;
 import com.traderbro.storage.StrategyConfigRepository;
 import com.traderbro.storage.TradeRepository;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -80,6 +87,7 @@ import ru.tinkoff.piapi.core.InvestApi;
 @EnableScheduling
 @EnableConfigurationProperties({AppProperties.class, TBankProperties.class,
         RiskProperties.class, ExecutionProperties.class, FuturesProperties.class,
+        IndicatorsProperties.class,
         com.traderbro.notify.telegram.TelegramProperties.class})
 public class ApplicationConfig {
 
@@ -123,7 +131,7 @@ public class ApplicationConfig {
 
     @Bean
     public BrokerGateway brokerGateway(InvestApi api, AppProperties app) {
-        return new TBankBrokerGateway(api, app.isSandbox(), 0, app.getMoneyScale());
+        return new TBankBrokerGateway(api, app.isSandbox(), app.getAccountId(), app.getMoneyScale());
     }
 
     @Bean
@@ -193,11 +201,13 @@ public class ApplicationConfig {
     }
 
     @Bean
-    public List<TradingStrategy> tradingStrategies(AppProperties app) {
+    public List<TradingStrategy> tradingStrategies(AppProperties app,
+                                                   IndicatorFactory indicatorFactory) {
         return List.of(new SmaCrossStrategy(app.getMoneyScale()),
                 new EmaMomentumStrategy(app.getMoneyScale()),
                 new BollingerMeanReversionStrategy(app.getMoneyScale()),
-                new DonchianBreakoutStrategy(app.getMoneyScale()));
+                new DonchianBreakoutStrategy(app.getMoneyScale()),
+                new AlligatorAoStrategy(app.getMoneyScale(), indicatorFactory.getAlligator()));
     }
 
     @Bean
@@ -212,6 +222,32 @@ public class ApplicationConfig {
         StrategyRegistry registry = new StrategyRegistry(provider, filter, auditSink);
         strategies.forEach(registry::register);
         return registry;
+    }
+
+    // ------------------------------------------------------------------ Williams indicators
+    @Bean
+    public IndicatorFactory indicatorFactory(IndicatorsProperties props) {
+        return new IndicatorFactory(
+                new IndicatorFactory.AlligatorParams(
+                        props.getAlligator().getJawPeriod(), props.getAlligator().getJawShift(),
+                        props.getAlligator().getTeethPeriod(), props.getAlligator().getTeethShift(),
+                        props.getAlligator().getLipsPeriod(), props.getAlligator().getLipsShift(),
+                        props.getAlligator().getAtrPeriod(),
+                        props.getAlligator().getEntanglementAtrThreshold()),
+                new IndicatorFactory.AoParams(
+                        props.getAwesomeOscillator().getFast(),
+                        props.getAwesomeOscillator().getSlow()));
+    }
+
+    @Bean
+    public IndicatorSnapshotService indicatorSnapshotService(IndicatorFactory factory,
+                                                             BarStore barStore,
+                                                             InstrumentRepository instruments,
+                                                             com.traderbro.storage.IndicatorSnapshotRepository snapshotRepo,
+                                                             IndicatorsProperties props,
+                                                             AppProperties app) {
+        return new IndicatorSnapshotService(factory, barStore, instruments, snapshotRepo,
+                props, app.getMaxBarsInMemory());
     }
 
     // ------------------------------------------------------------------ notification
@@ -245,17 +281,17 @@ public class ApplicationConfig {
 
     @Bean
     public StateRecovery stateRecovery(BrokerGateway gateway, OrderStore orderStore,
-                                       TradeRepository ledger) {
-        return new StateRecovery(gateway, orderStore, ledger);
+                                       TradeRepository ledger, AppProperties app) {
+        return new StateRecovery(gateway, orderStore, ledger, app.isObserveOnly());
     }
 
     @Bean
     public Reconciler reconciler(BrokerGateway gateway, TradeRepository ledger,
                                  OrderStore orderStore, KillSwitch killSwitch,
                                  ExecutionProperties props, Consumer<String> alertSink,
-                                 TraderEventPublisher publisher) {
+                                 TraderEventPublisher publisher, StateRecovery stateRecovery) {
         return new Reconciler(gateway, ledger, orderStore, killSwitch,
-                props.isAutoKillOnReconcileDiscrepancy(), alertSink, publisher);
+                props.isAutoKillOnReconcileDiscrepancy(), alertSink, publisher, stateRecovery);
     }
 
     @Bean
@@ -277,11 +313,13 @@ public class ApplicationConfig {
     @Bean
     public StreamManager streamManager(MarketDataProvider marketData, BarStore barStore,
                                        InstrumentRepository instruments, SignalEngine engine,
+                                       IndicatorSnapshotService snapshotService,
                                        KillSwitch killSwitch, AppProperties app,
                                        RiskProperties risk, Consumer<String> auditSink,
                                        StreamHealth health, TraderEventPublisher publisher) {
-        return new StreamManager(marketData, barStore, instruments, engine, killSwitch,
-                CandleInterval.FIFTEEN_MIN, risk.getMaxStreamLag(), auditSink, health, publisher);
+        return new StreamManager(marketData, barStore, instruments, engine, snapshotService,
+                killSwitch, CandleInterval.FIFTEEN_MIN, risk.getMaxStreamLag(),
+                auditSink, health, publisher);
     }
 
     // ------------------------------------------------------------------ backtest
@@ -302,8 +340,9 @@ public class ApplicationConfig {
 
     // ------------------------------------------------------------------ schedulers
     @Bean
-    public ReconciliationScheduler reconciliationScheduler(Reconciler reconciler) {
-        return new ReconciliationScheduler(reconciler);
+    public ReconciliationScheduler reconciliationScheduler(Reconciler reconciler,
+                                                           StateRecovery stateRecovery) {
+        return new ReconciliationScheduler(reconciler, stateRecovery);
     }
 
     @Bean
@@ -350,8 +389,27 @@ public class ApplicationConfig {
 
     @Bean
     public HistoryLoader historyLoader(MarketDataProvider md, BarStore barStore,
-                                       HistoryLoadConfig cfg, InstrumentRepository instruments) {
-        return new HistoryLoader(md, barStore, cfg, instruments::findByTickerIn);
+                                       HistoryLoadConfig cfg, InstrumentRepository instruments,
+                                       FuturesProperties futuresProps) {
+        return new HistoryLoader(md, barStore, cfg, tickers -> {
+            // Load instruments (shares + all futures for the configured basic assets) from the
+            // broker and persist them so streams/signals can start immediately, even before the
+            // 08:00 instrument-refresh cron fires.
+            List<Instrument> resolved = new ArrayList<>();
+            try {
+                resolved.addAll(md.findInstruments(tickers));
+            } catch (RuntimeException e) {
+                resolved.addAll(instruments.findByTickerIn(tickers));
+            }
+            List<String> basicAssets = futuresProps.getBasicAssets();
+            if (basicAssets != null && !basicAssets.isEmpty()) {
+                resolved.addAll(md.findAllFutures(basicAssets));
+            }
+            if (!resolved.isEmpty()) {
+                instruments.upsertAll(resolved);
+            }
+            return resolved;
+        });
     }
 
     // ------------------------------------------------------------------ startup sequence
@@ -359,7 +417,8 @@ public class ApplicationConfig {
     public ApplicationRunner startupRunner(StateRecovery recovery, StrategyRegistry registry,
                                            StrategyConfigRepository configRepo,
                                            KillSwitch killSwitch, OrderManager orderManager,
-                                           ExecutionProperties props, StreamManager streamManager) {
+                                           ExecutionProperties props, StreamManager streamManager,
+                                           IndicatorSnapshotService snapshotService) {
         return args -> {
             seedStrategies(configRepo);
             registry.reload();
@@ -373,6 +432,8 @@ public class ApplicationConfig {
                 }
             });
             killSwitch.setOnDeactivate(() -> { });
+            // Backfill indicator snapshots for any bars missed before the stream started.
+            snapshotService.catchUp();
             streamManager.start();
         };
     }
@@ -386,5 +447,10 @@ public class ApplicationConfig {
                         "rsiMin", "30", "rsiMax", "70", "atrPeriod", "14", "atrMult", "2"))
                 .orderType(OrderType.LIMIT).maxPositionPct(new BigDecimal("0.10"))
                 .interval(CandleInterval.FIFTEEN_MIN).version(1).build());
+        repo.upsert(StrategyConfig.builder().id(AlligatorAoStrategy.ID).enabled(true)
+                .params(Map.of("fast", "5", "slow", "34", "entanglementAtrThreshold", "0.5",
+                        "stopLookback", "5", "allowShort", "true", "atrPeriod", "14"))
+                .orderType(OrderType.LIMIT).maxPositionPct(new BigDecimal("0.10"))
+                .interval(CandleInterval.ONE_HOUR).version(1).build());
     }
 }

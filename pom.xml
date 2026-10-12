@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>${spring-boot.version}</version>
+        <version>4.0.1</version>
         <relativePath/>
     </parent>
 
@@ -40,9 +40,9 @@
         <telegrambots.version>9.0.0</telegrambots.version>
 
         <!-- T-Bank Invest API Java SDK -->
-        <!-- TODO: verify latest stable on Maven Central and pin exact build.
-             java-sdk-core is gRPC-based; keep aligned with the gRPC version it bundles. -->
-        <tinkoff-invest.version>1.0.0</tinkoff-invest.version>
+        <!-- verified on Maven Central: ru.tinkoff.piapi:java-sdk-core latest = 1.36 -->
+        <tinkoff-invest.version>1.36</tinkoff-invest.version>
+        <logstash-logback.version>8.0</logstash-logback.version>
 
         <!-- Boilerplate -->
         <!-- TODO: verify latest Lombok build supporting Java 25 -->
@@ -95,10 +95,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-liquibase</artifactId>
-        </dependency>
 
         <!-- Technical analysis -->
         <dependency>
@@ -133,6 +129,13 @@
             </exclusions>
         </dependency>
 
+        <!-- JSON logging (Logstash encoder for logback, pg-crypto style) -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>${logstash-logback.version}</version>
+        </dependency>
+
         <!-- Database -->
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -159,6 +162,14 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Liquibase API, test-only: migrations are applied by the docker-compose migrate
+             step, but the integration test still runs them on a clean DB itself. -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <version>${liquibase.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -199,6 +210,18 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Spring Boot 4.0.1 manages junit:junit to a nonexistent 5.12.2, which breaks
+                 test resolution (grpc-testing depends on junit:junit). Pin the real JUnit 4. -->
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>4.13.2</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <finalName>traderbro</finalName>
@@ -315,6 +338,72 @@
     </build>
 
     <profiles>
+        <!-- Build the Angular UI: install Node LTS, npm ci && npm run build, copy dist into
+             target/classes/static/ui so Spring Boot serves it under /ui/**. Disabled by
+             default for fast backend builds; enabled in the docker-compose image / release. -->
+        <profile>
+            <id>build-ui</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.eirslett</groupId>
+                        <artifactId>frontend-maven-plugin</artifactId>
+                        <version>1.15.1</version>
+                        <configuration>
+                            <workingDirectory>${project.basedir}/ui</workingDirectory>
+                            <installDirectory>${project.build.directory}</installDirectory>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>install-node-and-npm</id>
+                                <goals><goal>install-node-and-npm</goal></goals>
+                                <configuration>
+                                    <!-- Node LTS (check for a newer LTS on releases before bumping). -->
+                                    <nodeVersion>v22.11.0</nodeVersion>
+                                    <npmVersion>10.9.0</npmVersion>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>npm-ci</id>
+                                <goals><goal>npm</goal></goals>
+                                <configuration>
+                                    <arguments>ci</arguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>npm-build</id>
+                                <goals><goal>npm</goal></goals>
+                                <configuration>
+                                    <arguments>run build</arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>copy-ui-dist</id>
+                                <phase>prepare-package</phase>
+                                <goals><goal>copy-resources</goal></goals>
+                                <configuration>
+                                    <outputDirectory>${project.build.outputDirectory}/static/ui</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.basedir}/ui/dist</directory>
+                                            <filtering>false</filtering>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <!-- OWASP dependency-check: run explicitly: mvn -P owasp verify -->
         <profile>
             <id>owasp</id>

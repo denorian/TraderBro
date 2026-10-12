@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -31,7 +32,7 @@ public class OrderRepository implements OrderStore {
     private final int moneyScale;
     private final RowMapper<Order> mapper;
 
-    public OrderRepository(JdbcTemplate jdbc, int moneyScale) {
+    public OrderRepository(JdbcTemplate jdbc, @Value("${app.money-scale}") int moneyScale) {
         this.jdbc = jdbc;
         this.named = new NamedParameterJdbcTemplate(jdbc);
         this.moneyScale = moneyScale;

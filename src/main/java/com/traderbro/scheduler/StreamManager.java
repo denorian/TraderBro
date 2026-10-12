@@ -11,13 +11,13 @@ import com.traderbro.core.event.NotificationLevel;
 import com.traderbro.core.event.NotificationType;
 import com.traderbro.core.event.TraderEvent;
 import com.traderbro.core.event.TraderEventPublisher;
+import com.traderbro.core.indicators.IndicatorSnapshotService;
 import com.traderbro.execution.killswitch.KillSwitch;
 import com.traderbro.storage.InstrumentRepository;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -27,13 +27,13 @@ import org.springframework.scheduling.annotation.Scheduled;
  * the threshold triggers an automatic kill-switch.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class StreamManager {
 
     private final MarketDataProvider marketData;
     private final BarStore barStore;
     private final InstrumentRepository instrumentRepository;
     private final SignalEngine signalEngine;
+    private final IndicatorSnapshotService snapshotService;
     private final KillSwitch killSwitch;
     private final CandleInterval workingInterval;
     private final Duration staleThreshold;
@@ -44,6 +44,25 @@ public class StreamManager {
     private volatile StreamSubscription subscription;
     private volatile boolean started = false;
     private volatile boolean wasDown = false;
+
+    public StreamManager(MarketDataProvider marketData, BarStore barStore,
+                         InstrumentRepository instrumentRepository, SignalEngine signalEngine,
+                         IndicatorSnapshotService snapshotService, KillSwitch killSwitch,
+                         CandleInterval workingInterval, Duration staleThreshold,
+                         Consumer<String> auditSink, StreamHealth health,
+                         TraderEventPublisher publisher) {
+        this.marketData = marketData;
+        this.barStore = barStore;
+        this.instrumentRepository = instrumentRepository;
+        this.signalEngine = signalEngine;
+        this.snapshotService = snapshotService;
+        this.killSwitch = killSwitch;
+        this.workingInterval = workingInterval;
+        this.staleThreshold = staleThreshold;
+        this.auditSink = auditSink;
+        this.health = health;
+        this.publisher = publisher;
+    }
 
     /** Subscribes to all tradable instruments at the working interval. Idempotent. */
     public synchronized void start() {
@@ -73,6 +92,7 @@ public class StreamManager {
             barStore.upsert(List.of(bar));
             if (bar.isFinal_()) {
                 signalEngine.onClosedBar(bar);
+                snapshotService.onClosedBar(bar);
             }
         } catch (RuntimeException e) {
             // Never let a storage error kill the data path silently.

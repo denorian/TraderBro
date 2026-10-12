@@ -8,12 +8,13 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.time.Instant;
 import java.util.List;
+import java.nio.file.Path;
 import javax.sql.DataSource;
 import liquibase.Liquibase;
 import liquibase.database.Database;
 import liquibase.database.DatabaseFactory;
 import liquibase.database.jvm.JdbcConnection;
-import liquibase.resource.ClassLoaderResourceAccessor;
+import liquibase.resource.DirectoryResourceAccessor;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -51,8 +52,8 @@ class BarRepositoryIT {
             Database database = DatabaseFactory.getInstance()
                     .findCorrectDatabaseImplementation(new JdbcConnection(conn));
             Liquibase liquibase = new Liquibase(
-                    "db/changelog/db.changelog-master.yaml",
-                    new ClassLoaderResourceAccessor(), database);
+                    "db.changelog-master.sql",
+                    new DirectoryResourceAccessor(Path.of("migrations")), database);
             liquibase.update("");
         }
         // Bars table exists after migrations.

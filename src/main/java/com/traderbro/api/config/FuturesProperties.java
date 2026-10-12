@@ -13,7 +13,7 @@ public class FuturesProperties {
 
     private boolean enabled = true;
     /** Underlying assets for nearest-contract auto-selection. */
-    private List<String> basicAssets = List.of("IMOEX", "Si", "BR");
+    private List<String> basicAssets = List.of("IMOEX", "BR", "GOLD", "CR");
     /** Skip contracts expiring within this many days when selecting. */
     private int minDaysToExpiry = 7;
     /** Warn about rollover when this many days before expiry. */

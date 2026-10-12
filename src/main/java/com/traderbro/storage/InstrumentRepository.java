@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -45,7 +46,7 @@ public class InstrumentRepository {
     private final int moneyScale;
     private final RowMapper<Instrument> mapper;
 
-    public InstrumentRepository(JdbcTemplate jdbc, int moneyScale) {
+    public InstrumentRepository(JdbcTemplate jdbc, @Value("${app.money-scale}") int moneyScale) {
         this.jdbc = jdbc;
         this.named = new NamedParameterJdbcTemplate(jdbc);
         this.moneyScale = moneyScale;
@@ -102,7 +103,7 @@ public class InstrumentRepository {
             com.traderbro.core.domain.enums.InstrumentType instrumentType =
                     com.traderbro.core.domain.enums.InstrumentType.valueOf(type == null ? "SHARE" : type);
 
-            Instrument.InstrumentBuilder<?, ?> b = Instrument.builder()
+            Instrument.InstrumentBuilder b = Instrument.builder()
                     .figi(rs.getString("figi"))
                     .ticker(rs.getString("ticker"))
                     .name(rs.getString("name"))

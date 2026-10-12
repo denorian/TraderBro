@@ -5,11 +5,15 @@ import com.traderbro.core.domain.spi.OrderEventSource;
 import com.traderbro.core.domain.spi.OrderFillEvent;
 import com.traderbro.data.mapper.QuotationMapper;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
+import ru.tinkoff.piapi.contract.v1.OrderTrade;
+import ru.tinkoff.piapi.contract.v1.TradesStreamResponse;
 import ru.tinkoff.piapi.core.InvestApi;
-import ru.tinkoff.piapi.core.StreamService;
+import ru.tinkoff.piapi.core.stream.OrdersStreamService;
+import ru.tinkoff.piapi.core.stream.StreamProcessor;
 
 /**
  * Bridges the broker order stream to {@link OrderFillEvent}s so {@code OrderManager} can
@@ -18,12 +22,12 @@ import ru.tinkoff.piapi.core.StreamService;
 @Slf4j
 public class TBankOrderEventSource implements OrderEventSource {
 
-    private final InvestApi api;
+    private final OrdersStreamService ordersStreamService;
     private final int moneyScale;
     private final AtomicReference<Consumer<OrderFillEvent>> listener = new AtomicReference<>();
 
     public TBankOrderEventSource(InvestApi api, int moneyScale) {
-        this.api = api;
+        this.ordersStreamService = api.getOrdersStreamService();
         this.moneyScale = moneyScale;
     }
 
@@ -33,25 +37,25 @@ public class TBankOrderEventSource implements OrderEventSource {
             log.warn("order stream already subscribed; replacing listener");
             listener.set(onFill);
         }
-        // TODO: verify API — OrdersStreamService()/getOrdersStream() subscription mechanics.
-        StreamService<ru.tinkoff.piapi.contract.v1.StreamTrade> tradeStream =
-                api.getOrdersStreamService().getTradesStream();
-        tradeStream.subscribe(trade -> {
-            var t = trade.getTrade();
-            BigDecimal avg = QuotationMapper.toBigDecimal(t.getPrice(), moneyScale);
-            OrderFillEvent event = new OrderFillEvent(
-                    t.getOrderId(),
-                    t.getQuantity(),
-                    avg,
-                    OrderStatus.PARTIALLY_FILLED,
-                    t.getQuantity());
-            Consumer<OrderFillEvent> cb = listener.get();
-            if (cb != null) {
-                cb.accept(event);
+        StreamProcessor<TradesStreamResponse> processor = response -> {
+            if (!response.hasOrderTrades()) {
+                return;
             }
-        });
-        // TODO: verify API — subscribeOrders stream initiation method.
-        api.getOrdersStreamService().subscribeOrders(java.util.List.of());
+            var orderTrades = response.getOrderTrades();
+            String orderId = orderTrades.getOrderId();
+            for (OrderTrade t : orderTrades.getTradesList()) {
+                BigDecimal price = QuotationMapper.toBigDecimal(t.getPrice(), moneyScale);
+                long qty = t.getQuantity();
+                Consumer<OrderFillEvent> cb = listener.get();
+                if (cb != null) {
+                    cb.accept(new OrderFillEvent(orderId, qty, price,
+                            OrderStatus.PARTIALLY_FILLED, qty));
+                }
+            }
+        };
+        // Subscribes to trades for all accounts (empty iterable = all).
+        ordersStreamService.subscribeTrades(processor, err ->
+                log.warn("order trades stream error: {}", err.getMessage()), List.of());
         log.info("order stream subscribed");
     }
 }

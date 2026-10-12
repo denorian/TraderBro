@@ -36,7 +36,7 @@ public record BacktestMetrics(
         double totalReturn = n == 0 ? 0.0 : finalEquity / initialEquity - 1.0;
 
         Instant first = series.getBarCount() > 0
-                ? series.getBar(0).getEndTime().toInstant()
+                ? series.getBar(0).getEndTime()
                 : Instant.now();
         Instant last = SeriesFactory.lastEndTime(series) != null
                 ? SeriesFactory.lastEndTime(series)

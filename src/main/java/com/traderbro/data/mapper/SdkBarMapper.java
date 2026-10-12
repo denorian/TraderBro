@@ -35,8 +35,10 @@ public final class SdkBarMapper {
                 .build();
     }
 
-    /** Maps a stream candle (may be forming: {@code isFinal=false}). */
+    /** Maps a stream candle. SDK 1.36's stream {@link Candle} carries no is_final flag. */
     public Bar toBar(Candle c, CandleInterval interval) {
+        // TODO(verify): stream Candle in java-sdk 1.36 has no is_final field; treat as forming.
+        // Closed-candle detection must be added at the stream layer (e.g. next-candle arrival).
         return Bar.builder()
                 .figi(c.getFigi())
                 .ts(Instant.ofEpochSecond(c.getTime().getSeconds(), c.getTime().getNanos()))
@@ -46,7 +48,7 @@ public final class SdkBarMapper {
                 .low(QuotationMapper.toBigDecimal(c.getLow(), moneyScale))
                 .close(QuotationMapper.toBigDecimal(c.getClose(), moneyScale))
                 .volume(c.getVolume())
-                .final_(c.getIsFinal())
+                .final_(false)
                 .build();
     }
 }

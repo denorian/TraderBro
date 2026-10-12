@@ -10,6 +10,7 @@ import java.util.function.Function;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBar;
 import org.ta4j.core.BaseBarSeries;
+import org.ta4j.core.BaseBarSeriesBuilder;
 import org.ta4j.core.Indicator;
 import org.ta4j.core.num.Num;
 
@@ -36,39 +37,41 @@ public final class SeriesFactory {
     /**
      * Builds a windowed series (bounded memory) from domain bars.
      *
-     * @param bars      closed bars, ascending by time
      * @param numFactory e.g. {@code DoubleNum::valueOf} for the live engine or
-     *                  {@code DecimalNum::valueOf} for backtesting
-     * @param maxBars   maximum bars retained in memory (window)
-     * @param figi      series name
+     *                   {@code DecimalNum::valueOf} for backtesting
+     * @param maxBars    maximum bars retained in memory (window)
      */
     public static BarSeries fromDomain(List<Bar> bars, Function<Number, Num> numFactory,
                                        int maxBars, String figi) {
-        BaseBarSeries series = BaseBarSeries.builder()
-                .withName(figi)
-                .withMaxBarCount(maxBars)
-                .build();
+        List<org.ta4j.core.Bar> ta4jBars = new java.util.ArrayList<>();
         for (Bar bar : bars) {
             if (!bar.isFinal_()) {
                 // Forming candles must never enter the decision series.
                 continue;
             }
-            series.addBar(toTa4jBar(bar, numFactory), false);
+            ta4jBars.add(toTa4jBar(bar, numFactory));
         }
+        // withBars derives the series numFactory from the first bar, so the series type always
+        // matches the bar type (the default DecimalNum would otherwise reject DoubleNum bars).
+        BaseBarSeries series = new BaseBarSeriesBuilder()
+                .withName(figi)
+                .withMaxBarCount(maxBars)
+                .withBars(ta4jBars)
+                .build();
         return series;
     }
 
     /** Converts a single closed domain bar into a ta4j bar. */
     public static BaseBar toTa4jBar(Bar bar, Function<Number, Num> numFactory) {
-        return BaseBar.builder()
-                .timePeriod(toDuration(bar.getInterval()))
-                .endTime(org.ta4j.core.Timestamp.from(bar.getTs()))
-                .openPrice(numFactory.apply(bd(bar.getOpen())))
-                .highPrice(numFactory.apply(bd(bar.getHigh())))
-                .lowPrice(numFactory.apply(bd(bar.getLow())))
-                .closePrice(numFactory.apply(bd(bar.getClose())))
-                .volume(numFactory.apply(bar.getVolume()))
-                .build();
+        Duration period = toDuration(bar.getInterval());
+        Instant end = bar.getTs();
+        return new BaseBar(period, end.minus(period), end,
+                numFactory.apply(bd(bar.getOpen())),
+                numFactory.apply(bd(bar.getHigh())),
+                numFactory.apply(bd(bar.getLow())),
+                numFactory.apply(bd(bar.getClose())),
+                numFactory.apply(bar.getVolume()),
+                numFactory.apply(0), 0);
     }
 
     private static Number bd(BigDecimal v) {
@@ -90,11 +93,11 @@ public final class SeriesFactory {
         return v != null && !Double.isNaN(v.doubleValue());
     }
 
-    /** Unix epoch millis of the series' last bar end time, or null when empty. */
+    /** End time (Instant) of the series' last bar, or null when empty. */
     public static Instant lastEndTime(BarSeries series) {
         if (series.isEmpty()) {
             return null;
         }
-        return series.getLastBar().getEndTime().toInstant();
+        return series.getLastBar().getEndTime();
     }
 }
