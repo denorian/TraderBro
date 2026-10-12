@@ -37,6 +37,7 @@ indicators:
     slow: 34
   snapshot-retention-days: 90
   snapshot-timeframes: [FIFTEEN_MIN, ONE_HOUR, ONE_DAY]
+  recent-catchup-hours: 48
 
 ui:
   enabled: true

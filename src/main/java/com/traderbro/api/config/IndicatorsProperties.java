@@ -23,6 +23,8 @@ public class IndicatorsProperties {
     private int snapshotRetentionDays = 90;
     /** Timeframes the snapshot service computes across (all working intervals). */
     private List<String> snapshotTimeframes = List.of("FIFTEEN_MIN", "ONE_HOUR", "ONE_DAY");
+    /** Hours the periodic catch-up re-scans back (startup still backfills the full retention). */
+    private int recentCatchupHours = 48;
 
     @Getter
     @Setter

@@ -52,7 +52,7 @@ class BarRepositoryIT {
             Database database = DatabaseFactory.getInstance()
                     .findCorrectDatabaseImplementation(new JdbcConnection(conn));
             Liquibase liquibase = new Liquibase(
-                    "db.changelog-master.sql",
+                    "db.changelog-master.yaml",
                     new DirectoryResourceAccessor(Path.of("migrations")), database);
             liquibase.update("");
         }

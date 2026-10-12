@@ -45,6 +45,7 @@ public class IndicatorSnapshotService {
     private final int retentionDays;
     private final List<CandleInterval> timeframes;
     private final int maxBars;
+    private final int recentCatchupHours;
 
     public IndicatorSnapshotService(IndicatorFactory factory, BarStore barStore,
                                     InstrumentRepository instruments,
@@ -59,6 +60,7 @@ public class IndicatorSnapshotService {
                 .map(CandleInterval::valueOf)
                 .toList();
         this.maxBars = maxBars;
+        this.recentCatchupHours = props.getRecentCatchupHours();
     }
 
     /** Called by the stream when a candle closes: snapshot that instrument's timeframe. */
@@ -73,8 +75,15 @@ public class IndicatorSnapshotService {
 
     /** Gap-filling backfill over the retention window for every instrument and timeframe. */
     public void catchUp() {
-        Instant to = Instant.now();
-        Instant from = to.minus(retentionDays, ChronoUnit.DAYS);
+        catchUpFrom(Instant.now().minus(retentionDays, ChronoUnit.DAYS), Instant.now());
+    }
+
+    /** Periodic pass over a recent window only — startup already backfills the full retention. */
+    public void catchUpRecent() {
+        catchUpFrom(Instant.now().minus(recentCatchupHours, ChronoUnit.HOURS), Instant.now());
+    }
+
+    private void catchUpFrom(Instant from, Instant to) {
         List<Instrument> all = instruments.findAllTradable();
         for (Instrument inst : all) {
             for (CandleInterval tf : timeframes) {
@@ -171,10 +180,10 @@ public class IndicatorSnapshotService {
         return deleted;
     }
 
-    /** Periodic gap-filling pass (also covers higher timeframes not delivered by the stream). */
+    /** Periodic gap-filling pass over the recent window (higher timeframes, missed bars). */
     @Scheduled(fixedDelayString = "${indicators.catch-up-ms:300000}")
     public void scheduledCatchUp() {
-        catchUp();
+        catchUpRecent();
     }
 
     /** Daily retention cleanup. */

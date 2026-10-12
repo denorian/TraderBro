@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # TraderBro — run Liquibase migrations against the database.
 #
-# Migrations live in ./migrations/db.changelog-master.sql and are applied by the
+# Migrations live in ./migrations/db.changelog-master.yaml (which includes per-year
+# changelogs, which include the per-migration SQL files) and are applied by the
 # docker-compose `migrate` service. This script is the standalone equivalent for
 # local runs / CI without going through docker-compose. It uses the official
 # Liquibase Docker image, so no local Liquibase install is required.
@@ -22,11 +23,12 @@ DB_URL="jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}"
 
 echo "Applying Liquibase migrations from ./migrations to ${DB_URL} ..."
 
+# Master changelog includes per-year changelogs, which include the per-migration SQL files.
 docker run --rm \
   -v "$(pwd)/migrations:/liquibase/changelog" \
   -e "LIQUIBASE_COMMAND_URL=${DB_URL}" \
   -e "LIQUIBASE_COMMAND_USERNAME=${DB_USER}" \
   -e "LIQUIBASE_COMMAND_PASSWORD=${DB_PASS}" \
-  -e "LIQUIBASE_COMMAND_CHANGELOG_FILE=db.changelog-master.sql" \
+  -e "LIQUIBASE_COMMAND_CHANGELOG_FILE=db.changelog-master.yaml" \
   -e "LIQUIBASE_SEARCH_PATH=/liquibase/changelog" \
   "$IMAGE" update
