@@ -7,6 +7,17 @@ app:
   account-id: ${APP_ACCOUNT_ID:}
   observe-only: ${APP_OBSERVE_ONLY:false}
 
+backtest:
+  executor-pool-size: 2
+  default-commission-pct: 0.05
+  default-slippage-bps: 5
+  max-signals-per-run: 100000
+  results-retention-days: 180
+  retention-cron: "0 30 3 * * *"
+  walk-forward:
+    train-days: 180
+    test-days: 60
+
 tbank:
   token-env: TBANK_TOKEN
   timeout: 10s

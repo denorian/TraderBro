@@ -93,6 +93,13 @@ public class InstrumentRepository {
         return rows.stream().findFirst();
     }
 
+    /** Finds a single instrument by ticker (used to resolve UI chart paths by ticker). */
+    public Optional<Instrument> findByTicker(String ticker) {
+        List<Instrument> rows = jdbc.query("SELECT " + COLS + " FROM instruments WHERE ticker=? LIMIT 1",
+                mapper, ticker);
+        return rows.stream().findFirst();
+    }
+
     private final class InstrumentMapper implements RowMapper<Instrument> {
         @Override
         public Instrument mapRow(ResultSet rs, int rowNum) throws SQLException {

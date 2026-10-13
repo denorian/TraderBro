@@ -2,7 +2,9 @@ package com.traderbro.api.config;
 
 import com.traderbro.api.service.BacktestService;
 import com.traderbro.api.service.PortfolioService;
+import com.traderbro.core.backtest.BacktestOrchestrator;
 import com.traderbro.core.backtest.BacktestRunner;
+import com.traderbro.core.backtest.WalkForwardRunner;
 import com.traderbro.core.domain.Instrument;
 import com.traderbro.core.domain.StrategyConfig;
 import com.traderbro.core.domain.enums.CandleInterval;
@@ -87,7 +89,7 @@ import ru.tinkoff.piapi.core.InvestApi;
 @EnableScheduling
 @EnableConfigurationProperties({AppProperties.class, TBankProperties.class,
         RiskProperties.class, ExecutionProperties.class, FuturesProperties.class,
-        IndicatorsProperties.class,
+        IndicatorsProperties.class, BacktestProperties.class,
         com.traderbro.notify.telegram.TelegramProperties.class})
 public class ApplicationConfig {
 
@@ -336,6 +338,32 @@ public class ApplicationConfig {
         return new BacktestService(runner, barStore, instruments, runRepo,
                 System.getenv().getOrDefault("BUILD_GIT_HASH", "dev"), "reports",
                 app.getMoneyScale(), publisher);
+    }
+
+    @Bean
+    public WalkForwardRunner walkForwardRunner(BacktestRunner runner) {
+        return new WalkForwardRunner(runner);
+    }
+
+    @Bean
+    public BacktestOrchestrator backtestOrchestrator(BacktestRunner runner,
+                                                     WalkForwardRunner walkForwardRunner,
+                                                     BarStore barStore,
+                                                     InstrumentRepository instruments,
+                                                     com.traderbro.storage.BacktestBatchRepository batchRepo,
+                                                     StrategyRegistry registry,
+                                                     StrategyConfigProvider configProvider,
+                                                     TraderEventPublisher publisher,
+                                                     BacktestProperties props) {
+        return new BacktestOrchestrator(runner, walkForwardRunner, barStore, instruments,
+                batchRepo, registry, configProvider, publisher,
+                System.getenv().getOrDefault("BUILD_GIT_HASH", "dev"), props);
+    }
+
+    @Bean
+    public com.traderbro.scheduler.BacktestRetentionScheduler backtestRetentionScheduler(
+            com.traderbro.storage.BacktestBatchRepository batchRepo, BacktestProperties props) {
+        return new com.traderbro.scheduler.BacktestRetentionScheduler(batchRepo, props);
     }
 
     // ------------------------------------------------------------------ schedulers

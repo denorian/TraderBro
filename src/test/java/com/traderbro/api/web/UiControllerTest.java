@@ -58,10 +58,12 @@ class UiControllerTest {
 
     @Test
     void chartReturnsBarsAndIndicatorLines() throws Exception {
+        when(instruments.findByTicker("SBER"))
+                .thenReturn(java.util.Optional.of(instrument("F1", "SBER", InstrumentType.SHARE)));
         when(barStore.findByFigiAndInterval(eq("F1"), eq(CandleInterval.ONE_HOUR), any(), any()))
                 .thenReturn(linearBars(60));
 
-        mvc.perform(get("/api/chart/F1").param("interval", "1h"))
+        mvc.perform(get("/api/chart/SBER").param("interval", "1h"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.figi").value("F1"))
                 .andExpect(jsonPath("$.interval").value("ONE_HOUR"))
@@ -72,10 +74,12 @@ class UiControllerTest {
 
     @Test
     void chartLimitIsEnforced() throws Exception {
+        when(instruments.findByTicker("SBER"))
+                .thenReturn(java.util.Optional.of(instrument("F1", "SBER", InstrumentType.SHARE)));
         when(barStore.findByFigiAndInterval(eq("F1"), eq(CandleInterval.ONE_HOUR), any(), any()))
                 .thenReturn(linearBars(60));
 
-        mvc.perform(get("/api/chart/F1").param("interval", "1h").param("limit", "10"))
+        mvc.perform(get("/api/chart/SBER").param("interval", "1h").param("limit", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bars.length()").value(10))
                 .andExpect(jsonPath("$.alligator.length()").value(10))

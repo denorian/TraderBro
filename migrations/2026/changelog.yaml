@@ -35,3 +35,6 @@ databaseChangeLog:
   - include:
       file: "20261012-1_indicator_snapshots.sql"
       relativeToChangelogFile: true
+  - include:
+      file: "20261013-1_backtest_runs.sql"
+      relativeToChangelogFile: true

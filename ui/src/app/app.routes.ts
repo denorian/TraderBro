@@ -13,6 +13,21 @@ export const routes: Routes = [
     canActivate: [loginGuard],
     loadComponent: () => import('./features/chart/chart.component').then(m => m.ChartComponent)
   },
+  {
+    path: 'backtest',
+    canActivate: [loginGuard],
+    loadComponent: () => import('./features/backtest/backtest-list.component').then(m => m.BacktestListComponent)
+  },
+  {
+    path: 'backtest/new',
+    canActivate: [loginGuard],
+    loadComponent: () => import('./features/backtest/backtest-form.component').then(m => m.BacktestFormComponent)
+  },
+  {
+    path: 'backtest/:id',
+    canActivate: [loginGuard],
+    loadComponent: () => import('./features/backtest/backtest-result.component').then(m => m.BacktestResultComponent)
+  },
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   { path: '**', redirectTo: 'dashboard' }
 ];

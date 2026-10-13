@@ -1,5 +1,5 @@
-/* TraderBro UI — Taiga UI night theme (neutral palette, semantic accents only). */
-@import "@taiga-ui/core/styles/taiga-ui-local.less";
+/* TraderBro UI — Taiga UI night theme (semantic accents only).
+   CSS custom properties (--tui-*) are provided at runtime by the Taiga theme. */
 
 html,
 body {
@@ -8,8 +8,8 @@ body {
 }
 
 body {
-  background: var(--tui-base-01);
-  color: var(--tui-text-01);
+  background: var(--tui-background-base);
+  color: var(--tui-text-primary);
   font-family: var(--tui-font-text);
 }
 
@@ -19,15 +19,15 @@ body {
 
 /* Semantic colours (profit/loss/status) — the only accents allowed. */
 .tp-profit {
-  color: var(--tui-positive);
+  color: var(--tui-status-positive);
 }
 
 .tp-loss {
-  color: var(--tui-negative);
+  color: var(--tui-status-negative);
 }
 
 /* Dark tables: subtle row hover for wide dashboards. */
 .tp-table-row:hover {
-  background: var(--tui-base-02);
+  background: var(--tui-background-base-alt);
   cursor: pointer;
 }

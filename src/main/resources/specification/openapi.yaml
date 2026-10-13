@@ -63,6 +63,119 @@ components:
         ts: { type: string, format: date-time, nullable: true }
         alligator: { type: object, additionalProperties: true }
         ao: { type: object, additionalProperties: true }
+    BacktestCosts:
+      type: object
+      properties:
+        commissionPct: { type: number, format: double, default: 0.0005 }
+        slippageBps: { type: integer, default: 5 }
+        initialCapital: { type: number, format: double, default: 1000000 }
+        maxPositionPct: { type: number, format: double, default: 0.95 }
+    BacktestRequest:
+      type: object
+      required: [strategyIds, figis, interval, from, to]
+      properties:
+        strategyIds: { type: array, items: { type: string } }
+        figis: { type: array, items: { type: string } }
+        interval: { type: string, enum: [ONE_MIN, FIVE_MIN, FIFTEEN_MIN, ONE_HOUR, ONE_DAY] }
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        costs: { $ref: '#/components/schemas/BacktestCosts' }
+        strategyParamsOverrides:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: true
+        walkForward: { type: boolean, default: false }
+        walkForwardTrainDays: { type: integer }
+        walkForwardTestDays: { type: integer }
+    CreateResponse:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+    MetricsDto:
+      type: object
+      properties:
+        totalReturn: { type: number, format: double }
+        cagr: { type: number, format: double }
+        sharpe: { type: number, format: double }
+        sortino: { type: number, format: double }
+        calmar: { type: number, format: double }
+        maxDrawdown: { type: number, format: double }
+        winRate: { type: number, format: double }
+        profitFactor: { type: number, format: double }
+        numTrades: { type: integer, format: int64 }
+        avgBarsHeld: { type: number, format: double }
+        finalEquity: { type: number, format: double }
+    PairResultDto:
+      type: object
+      properties:
+        strategyId: { type: string }
+        figi: { type: string }
+        metrics: { $ref: '#/components/schemas/MetricsDto' }
+        barsCount: { type: integer, format: int64 }
+        equity: { type: array, items: { $ref: '#/components/schemas/EquityPoint' } }
+        trades: { type: array, items: { $ref: '#/components/schemas/TradeRecord' } }
+        signals: { type: array, items: { $ref: '#/components/schemas/SignalRecord' } }
+    EquityPoint:
+      type: object
+      properties:
+        ts: { type: string, format: date-time }
+        equity: { type: number, format: double }
+    TradeRecord:
+      type: object
+      properties:
+        strategyId: { type: string }
+        figi: { type: string }
+        direction: { type: string, enum: [LONG, SHORT] }
+        entryTs: { type: string, format: date-time }
+        entryPrice: { type: number, format: double }
+        exitTs: { type: string, format: date-time }
+        exitPrice: { type: number, format: double }
+        quantity: { type: number, format: double }
+        pnl: { type: number, format: double }
+        pnlPct: { type: number, format: double }
+        exitReason: { type: string }
+    SignalRecord:
+      type: object
+      properties:
+        strategyId: { type: string }
+        figi: { type: string }
+        ts: { type: string, format: date-time }
+        type: { type: string, enum: [ENTRY, EXIT] }
+        price: { type: number, format: double }
+        verdict: { type: string }
+        reason: { type: string }
+    RunSummary:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+        progressPct: { type: integer }
+        errorMessage: { type: string, nullable: true }
+        request: { $ref: '#/components/schemas/BacktestRequest' }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time, nullable: true }
+        finishedAt: { type: string, format: date-time, nullable: true }
+    RunDetailDto:
+      type: object
+      properties:
+        run: { $ref: '#/components/schemas/RunSummary' }
+        results: { type: array, items: { $ref: '#/components/schemas/PairResultDto' } }
+    CompareRowDto:
+      type: object
+      properties:
+        runId: { type: string }
+        strategyId: { type: string }
+        figi: { type: string }
+        metrics: { $ref: '#/components/schemas/MetricsDto' }
+    StrategyDto:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        params: { type: object, additionalProperties: { type: string } }
 paths:
   /api/instruments:
     get:
@@ -76,12 +189,12 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/InstrumentDto' }
-  /api/chart/{figi}:
+  /api/chart/{ticker}:
     get:
-      summary: Candles + Alligator lines + Awesome Oscillator for one instrument
+      summary: Candles + Alligator lines + Awesome Oscillator for one instrument (by ticker)
       operationId: getChart
       parameters:
-        - { name: figi, in: path, required: true, schema: { type: string } }
+        - { name: ticker, in: path, required: true, schema: { type: string } }
         - { name: interval, in: query, schema: { type: string, default: 1h } }
         - { name: from, in: query, schema: { type: string, format: date-time } }
         - { name: to, in: query, schema: { type: string, format: date-time } }
@@ -106,3 +219,134 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/LatestIndicatorDto' }
+  /api/strategies:
+    get:
+      summary: Available strategies for the backtest form
+      operationId: listStrategies
+      responses:
+        '200':
+          description: Strategy list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StrategyDto' }
+  /api/backtests:
+    post:
+      summary: Launch a batch backtest (QUEUED → RUNNING → COMPLETED/FAILED/CANCELLED)
+      operationId: createBacktest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BacktestRequest' }
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateResponse' }
+        '400':
+          description: Invalid request
+    get:
+      summary: List backtest runs (filters, pagination, newest first)
+      operationId: listBacktests
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: Run list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RunSummary' }
+  /api/backtests/compare:
+    get:
+      summary: Comparative metrics across up to 5 runs
+      operationId: compareBacktests
+      parameters:
+        - { name: ids, in: query, required: true, schema: { type: array, items: { type: string } } }
+      responses:
+        '200':
+          description: Compare rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CompareRowDto' }
+  /api/backtests/{id}:
+    get:
+      summary: Backtest run details + per-pair metrics
+      operationId: getBacktest
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Run detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunDetailDto' }
+    delete:
+      summary: Cancel a queued/running run or delete a finished one
+      operationId: deleteBacktest
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '202': { description: Accepted (cancelled) }
+        '204': { description: Deleted }
+        '404': { description: Not found }
+  /api/backtests/{id}/results:
+    get:
+      summary: Full results — per-pair metrics, equity, trades, signals
+      operationId: backtestResults
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Pair results
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PairResultDto' }
+  /api/backtests/{id}/signals:
+    get:
+      summary: Signal points for chart pins
+      operationId: backtestSignals
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: figi, in: query, schema: { type: string } }
+        - { name: strategyId, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 1000 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: Signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SignalRecord' }
+  /api/backtests/{id}/trades:
+    get:
+      summary: Closed trades
+      operationId: backtestTrades
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: figi, in: query, schema: { type: string } }
+        - { name: strategyId, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 1000 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: Trades
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TradeRecord' }

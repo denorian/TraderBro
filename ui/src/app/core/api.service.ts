@@ -2,11 +2,20 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
+  BacktestRunDetail,
+  BacktestRunSummary,
   ChartResponse,
+  CompareRowDto,
+  CreateBacktestResponse,
   InstrumentDto,
   LatestIndicatorDto,
+  PairResultDto,
   SignalDto,
-  StatusResponse
+  SignalRecordDto,
+  StatusResponse,
+  StrategyDto,
+  TradeRecordDto,
+  BacktestRequest
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -39,6 +48,54 @@ export class ApiService {
     const to = new Date().toISOString();
     return this.http.get<SignalDto[]>(`${this.base}/signals`, {
       params: new HttpParams().set('from', from).set('to', to)
+    });
+  }
+
+  // ---------------------------------------------------------------- backtests
+  strategies(): Observable<StrategyDto[]> {
+    return this.http.get<StrategyDto[]>(`${this.base}/backtests/strategies`);
+  }
+
+  createBacktest(request: BacktestRequest): Observable<CreateBacktestResponse> {
+    return this.http.post<CreateBacktestResponse>(`${this.base}/backtests`, request);
+  }
+
+  listBacktests(params?: { status?: string; limit?: number }): Observable<BacktestRunSummary[]> {
+    let p = new HttpParams();
+    if (params?.status) { p = p.set('status', params.status); }
+    p = p.set('limit', String(params?.limit ?? 20));
+    return this.http.get<BacktestRunSummary[]>(`${this.base}/backtests`, { params: p });
+  }
+
+  backtest(id: string): Observable<BacktestRunDetail> {
+    return this.http.get<BacktestRunDetail>(`${this.base}/backtests/${id}`);
+  }
+
+  backtestResults(id: string): Observable<PairResultDto[]> {
+    return this.http.get<PairResultDto[]>(`${this.base}/backtests/${id}/results`);
+  }
+
+  backtestSignals(id: string, figi?: string, strategyId?: string): Observable<SignalRecordDto[]> {
+    let p = new HttpParams().set('limit', '10000');
+    if (figi) { p = p.set('figi', figi); }
+    if (strategyId) { p = p.set('strategyId', strategyId); }
+    return this.http.get<SignalRecordDto[]>(`${this.base}/backtests/${id}/signals`, { params: p });
+  }
+
+  backtestTrades(id: string, figi?: string, strategyId?: string): Observable<TradeRecordDto[]> {
+    let p = new HttpParams().set('limit', '10000');
+    if (figi) { p = p.set('figi', figi); }
+    if (strategyId) { p = p.set('strategyId', strategyId); }
+    return this.http.get<TradeRecordDto[]>(`${this.base}/backtests/${id}/trades`, { params: p });
+  }
+
+  deleteBacktest(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/backtests/${id}`);
+  }
+
+  compareBacktests(ids: string[]): Observable<CompareRowDto[]> {
+    return this.http.get<CompareRowDto[]>(`${this.base}/backtests/compare`, {
+      params: new HttpParams().set('ids', ids.join(','))
     });
   }
 }

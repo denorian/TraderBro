@@ -108,6 +108,11 @@ public class StrategyRegistry {
         return factories.get(id);
     }
 
+    /** All registered strategy ids (registered factories), regardless of active state. */
+    public java.util.Set<String> ids() {
+        return factories.keySet();
+    }
+
     /** Active strategy config by id, or null when disabled. */
     public StrategyConfig active(String id) {
         return active.get(id);

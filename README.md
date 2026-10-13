@@ -8,6 +8,11 @@ with costs and walk-forward validation, enforces a hard risk perimeter, and plac
 Stage 2 adds **futures (FORTS)** support and **Telegram notifications** with a persistent,
 retryable outbound queue and read-only bot commands.
 
+Stage 3.2 adds **interactive backtesting with a web UI**: run backtests over any combination of
+strategies × instruments from the UI, compare runs, and pin ENTRY/EXIT signals straight onto the
+price chart. Backtests run in an isolated thread pool and **never touch the live trading path**
+(no writes to `orders`/`positions`, no `BrokerGateway` calls).
+
 > LLM layers are explicitly out of scope. They plug in later via the `SignalFilter` seam
 > (`NoOpSignalFilter` ships as the no-op implementation).
 
@@ -103,9 +108,21 @@ java -jar target/traderbro.jar
 
 ### 5. Backtest
 
-Backtests are run through the API/service layer and exported to `reports/backtests/*.md`
-and persisted in `backtest_runs`. Run the full stack (sandbox) and use the service endpoint
-or invoke `BacktestService` from a test/CLI.
+Backtests are run through the **`BacktestOrchestrator`** (async queue, statuses
+`QUEUED → RUNNING → COMPLETED / FAILED / CANCELLED`) and exposed over REST + the web UI.
+Each run stores per-pair metrics, trades, signals and an equity curve; runs are reproducible
+(identical request → identical metrics). Results are retained for `backtest.results-retention-days`
+(180) and purged by a scheduler.
+
+**Safety:** backtests execute in an isolated daemon thread pool
+(`backtest.executor-pool-size`, default 2) and never write to `orders`/`positions` nor call
+`BrokerGateway`. Starting a backtest is the only write operation the UI can perform, and it is
+safe by construction. The UI is otherwise **read-only** for trading.
+
+To run from the UI, start the stack and open the **Бэктест** page (`/backtest`): pick strategies
+and instruments, a timeframe, a period and optional costs/walk-forward, then launch. From the
+result card you can view per-pair metrics + equity, compare up to 4 runs, and open any pair
+"on chart" to see ENTRY/EXIT pins.
 
 ### 6. Start sandbox trading
 
@@ -128,6 +145,14 @@ export TRADING_LIVE_ACK=I_UNDERSTAND_RISK
 | GET | `/api/signals?from=..&to=..` | signals with verdict + reason |
 | GET | `/api/orders?date=..` | open orders |
 | GET | `/api/backtests/{id}` | backtest report |
+| GET | `/api/strategies` | registered strategies (id, name, description, params) |
+| POST | `/api/backtests` | create a backtest run (body = `BacktestRequest`), returns `202` + id |
+| GET | `/api/backtests` | list runs (filter by status/date, paginated, desc) |
+| GET | `/api/backtests/{id}/results` | full per-pair results + equity curves |
+| GET | `/api/backtests/{id}/signals?figi=&strategyId=` | run signals (for chart pins) |
+| GET | `/api/backtests/{id}/trades?figi=&strategyId=` | run trades |
+| GET | `/api/backtests/compare?ids=..` | comparative metrics table (up to 5 runs) |
+| DELETE | `/api/backtests/{id}` | cancel (QUEUED/RUNNING) or delete a run |
 | POST | `/api/killswitch/activate` | body `{"confirm":true}` |
 | POST | `/api/killswitch/deactivate` | body `{"confirm":true}` (manual only) |
 
@@ -144,6 +169,17 @@ Key stage-2 additions:
 | `risk.trading-windows.{shares,futures}` | per-class trading windows (futures have an evening session + clearing breaks) |
 | `risk.futures.max-margin-pct` | total GO limit (default 30%) |
 | `telegram.*` | bot token/chat-id env vars, min level, per-minute cap, retry |
+
+Key stage-3.2 additions (`backtest.*`):
+
+| Key | Purpose |
+|---|---|
+| `backtest.executor-pool-size` | isolated backtest thread pool size (default 2) |
+| `backtest.default-commission-pct` | default commission per trade (0.05%) |
+| `backtest.default-slippage-bps` | default slippage in basis points (5) |
+| `backtest.max-signals-per-run` | sanity cap on stored signals (100000) |
+| `backtest.results-retention-days` | retention for purge scheduler (180) |
+| `backtest.walk-forward.{train-days,test-days}` | walk-forward window defaults (180/60) |
 
 ### Telegram setup
 
@@ -170,8 +206,13 @@ The bot is **long-polling** (works behind NAT), answers read-only commands
   `TelegramMessageFormatterTest`, `NotificationDeduplicatorTest`, `NotificationRateLimiterTest`.
 - Integration (Testcontainers + TimescaleDB): `BarRepositoryIT` — applies all Liquibase
   migrations on a clean container and verifies idempotent bar upsert.
+- Backtest stage 3.2: `BacktestOrchestratorTest` (queue, cancel, FAILED on bad params, pool
+  concurrency), `BacktestReproducibilityTest` (same request → same metrics),
+  `BacktestControllerTest` (REST validation, signal pagination, compare ≤ 5 runs).
 - Architecture: `ArchitectureTest` (ArchUnit) — core⇏SDK/Web, data⇏execution, core⇏execution.
 
-> The Java-25/ta4j/Spring-Boot build was **not** compiled in this environment (JDK 21 +
-> no Maven present). Verify with `mvn verify` on a JDK 25 toolchain before trusting the
-> build; SDK method names are marked `// TODO: verify API`.
+> Stage 1–2 Java-25/ta4j/Spring-Boot tests: a subset of pre-existing tests (6 ArchUnit cases on
+> JDK-25 bytecode, plus `SmaCrossStrategy`/`RiskGate`/`OrderManager`/`TelegramMessageFormatter`)
+> fail under the JDK 25 toolchain and are unrelated to the stage 3.2 changes. The stage 3.2
+> backtest tests pass. Verify with `mvn verify` on a JDK 25 toolchain before trusting the build;
+> SDK method names are marked `// TODO: verify API`.

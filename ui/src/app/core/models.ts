@@ -91,3 +91,113 @@ export interface SignalDto {
   verdict: 'ACCEPTED' | 'FILTERED' | string;
   reason?: string;
 }
+
+// ---------------------------------------------------------------- backtests
+
+export interface BacktestCosts {
+  commissionPct?: number;
+  slippageBps?: number;
+  initialCapital?: number;
+  maxPositionPct?: number;
+}
+
+export interface BacktestRequest {
+  strategyIds: string[];
+  figis: string[];
+  interval: 'FIFTEEN_MIN' | 'ONE_HOUR' | 'ONE_DAY';
+  from: string;
+  to: string;
+  costs?: BacktestCosts;
+  strategyParamsOverrides?: Record<string, Record<string, unknown>>;
+  walkForward: boolean;
+  walkForwardTrainDays?: number;
+  walkForwardTestDays?: number;
+}
+
+export interface CreateBacktestResponse {
+  id: string;
+  status: string;
+}
+
+export interface BacktestMetricsDto {
+  totalReturn: number;
+  cagr: number;
+  sharpe: number;
+  sortino: number;
+  calmar: number;
+  maxDrawdown: number;
+  winRate: number;
+  profitFactor: number;
+  numTrades: number;
+  avgBarsHeld: number;
+  finalEquity: number;
+}
+
+export interface BacktestRunSummary {
+  id: string;
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  progressPct: number;
+  errorMessage: string | null;
+  request: BacktestRequest;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface EquityPointDto {
+  ts: string;
+  equity: number;
+}
+
+export interface TradeRecordDto {
+  strategyId: string;
+  figi: string;
+  direction: 'LONG' | 'SHORT';
+  entryTs: string;
+  entryPrice: number;
+  exitTs: string;
+  exitPrice: number;
+  quantity: number;
+  pnl: number;
+  pnlPct: number;
+  exitReason: string;
+}
+
+export interface SignalRecordDto {
+  strategyId: string;
+  figi: string;
+  ts: string;
+  type: 'ENTRY' | 'EXIT';
+  price: number;
+  verdict: string;
+  reason: string;
+}
+
+export interface PairResultDto {
+  strategyId: string;
+  figi: string;
+  metrics: BacktestMetricsDto;
+  barsCount: number;
+  equity: EquityPointDto[];
+  trades: TradeRecordDto[];
+  signals: SignalRecordDto[];
+}
+
+export interface BacktestRunDetail {
+  run: BacktestRunSummary;
+  results: PairResultDto[];
+}
+
+export interface CompareRowDto {
+  runId: string;
+  strategyId: string;
+  figi: string;
+  metrics: BacktestMetricsDto;
+}
+
+export interface StrategyDto {
+  id: string;
+  name: string;
+  description: string;
+  params: Record<string, string>;
+}

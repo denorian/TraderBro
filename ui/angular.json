@@ -22,6 +22,8 @@
               { "glob": "**/*", "input": "public", "ignore": [".gitkeep"], "output": "/" }
             ],
             "styles": [
+              "@taiga-ui/core/styles/taiga-ui-local.less",
+              "@taiga-ui/core/styles/taiga-ui-theme.less",
               "src/styles.scss"
             ],
             "scripts": []
@@ -33,6 +35,7 @@
                 { "type": "anyComponentStyle", "maximumWarning": "6kb", "maximumError": "16kb" }
               ],
               "outputHashing": "all",
+              "baseHref": "/ui/",
               "fileReplacements": []
             },
             "development": {

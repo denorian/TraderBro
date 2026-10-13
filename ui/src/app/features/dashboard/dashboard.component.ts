@@ -1,17 +1,12 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router, RouterLink } from '@angular/router';
-import { TuiButton, TuiBadge, TuiNotification } from '@taiga-ui/core';
-import { TuiTag } from '@taiga-ui/kit';
-import { TuiTableModule } from '@taiga-ui/addon-table';
-import { forkJoin, from, switchMap, timer } from 'rxjs';
+import { Router } from '@angular/router';
+import { TuiButton, TuiNotification } from '@taiga-ui/core';
+import { TuiBadge } from '@taiga-ui/kit';
+import { TuiTable, TuiTableTbody, TuiTableTd, TuiTableTh, TuiTableThead, TuiTableTr } from '@taiga-ui/addon-table';
+import { firstValueFrom, forkJoin, switchMap, timer } from 'rxjs';
 import { ApiService } from '../../core/api.service';
-import {
-  InstrumentDto,
-  LatestIndicatorDto,
-  SignalDto,
-  StatusResponse
-} from '../../core/models';
+import { InstrumentDto, LatestIndicatorDto, SignalDto, StatusResponse } from '../../core/models';
 import { PricePipe } from '../../shared/pipes/price.pipe';
 import { MoneyRubPipe } from '../../shared/pipes/money-rub.pipe';
 import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
@@ -20,8 +15,9 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
   selector: 'app-dashboard',
   standalone: true,
   imports: [
-    RouterLink, TuiButton, TuiBadge, TuiNotification, TuiTag,
-    TuiTableModule, PricePipe, MoneyRubPipe, MskTimePipe
+    TuiButton, TuiNotification, TuiBadge,
+    TuiTable, TuiTableThead, TuiTableTbody, TuiTableTr, TuiTableTh, TuiTableTd,
+    PricePipe, MoneyRubPipe, MskTimePipe
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -52,7 +48,7 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
 
     <div class="filter">
       <label>Тип:</label>
-      <select [value]="typeFilter()" (change)="typeFilter.set(($event.target as HTMLSelectElement).value)">
+      <select #typeSel [value]="typeFilter()" (change)="setTypeFilter(typeSel.value)">
         <option value="">Все</option>
         <option value="SHARE">Акции</option>
         <option value="FUTURE">Фьючерсы</option>
@@ -60,7 +56,7 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
     </div>
 
     @if (error()) {
-      <tui-notification appearance="error" [hasIcon]="true" class="notice">
+      <tui-notification appearance="error" class="notice">
         Ошибка загрузки данных.
         <button tuiButton appearance="flat" size="s" (click)="reload()">Повторить</button>
       </tui-notification>
@@ -68,30 +64,28 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
 
     <div class="tables">
       <table tuiTable [columns]="columns" class="inst">
-        <thead>
+        <thead tuiThead>
           <tr>
             <th tuiTh>Тикер</th>
             <th tuiTh>Тип</th>
-            <th tuiTh>Цена</th>
             <th tuiTh>AO</th>
             <th tuiTh>Фаза</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody tuiTbody>
           @for (row of filtered(); track row.figi) {
-            <tr class="tp-table-row" (click)="openChart(row.figi)">
+            <tr tuiTr class="tp-table-row" (click)="openChart(row.ticker)">
               <td tuiTd><strong>{{ row.ticker }}</strong></td>
-              <td tuiTd><tui-tag [value]="row.type === 'FUTURE' ? 'фьючерс' : 'акция'"></tui-tag></td>
-              <td tuiTd>{{ row.price | price }}</td>
+              <td tuiTd><tui-badge appearance="neutral">{{ row.type === 'FUTURE' ? 'фьючерс' : 'акция' }}</tui-badge></td>
               <td tuiTd>
                 <span [class.tp-profit]="(row.ao ?? 0) > 0" [class.tp-loss]="(row.ao ?? 0) < 0">
-                  {{ row.ao | number:'1.2-2' }}
+                  {{ row.ao | price:2 }}
                 </span>
               </td>
               <td tuiTd><tui-badge [appearance]="stateAppearance(row.state)">{{ row.state }}</tui-badge></td>
             </tr>
           } @empty {
-            <tr><td tuiTd colspan="5">Нет инструментов</td></tr>
+            <tr tuiTr><td tuiTd colspan="4">Нет инструментов</td></tr>
           }
         </tbody>
       </table>
@@ -115,7 +109,7 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
                 <tui-badge [appearance]="s.verdict === 'ACCEPTED' ? 'success' : 'warning'">
                   {{ s.direction }}
                 </tui-badge>
-                {{ s.strategyId }} {{ s.figi }} @ {{ s.price | price }} ({{ s.ts | mskTime }})
+                {{ s.strategyId }} {{ s.figi }} · {{ s.price | price }} ({{ s.ts | mskTime }})
               </li>
             } @empty {
               <li>Сигналов нет</li>
@@ -128,9 +122,9 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
   styles: [`
     .dash-header { display: flex; align-items: center; gap: 1rem; padding: .75rem 1rem; }
     .brand { font-weight: 700; }
-    .badges { display: flex; gap: .5rem; flex: 1; }
+    .badges { display: flex; gap: .5rem; flex: 1; flex-wrap: wrap; }
     .pnl { display: flex; gap: .5rem; align-items: baseline; }
-    .updated { color: var(--tui-text-02); font-size: .8rem; }
+    .updated { color: var(--tui-text-secondary); font-size: .8rem; }
     .filter { padding: 0 1rem 1rem; display: flex; gap: .5rem; align-items: center; }
     .notice { margin: 0 1rem 1rem; }
     .tables { display: grid; grid-template-columns: 1fr 340px; gap: 1rem; padding: 0 1rem; }
@@ -144,7 +138,7 @@ export class DashboardComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
-  readonly columns = ['ticker', 'type', 'price', 'ao', 'state'];
+  readonly columns = ['ticker', 'type', 'ao', 'state'];
   readonly typeFilter = signal('');
   readonly status = signal<StatusResponse | null>(null);
   readonly instruments = signal<InstrumentDto[]>([]);
@@ -152,7 +146,6 @@ export class DashboardComponent implements OnInit {
   readonly signals = signal<SignalDto[]>([]);
   readonly error = signal(false);
   readonly lastUpdated = signal<string>(new Date().toISOString());
-
   readonly filtered = signal<Row[]>([]);
 
   pnl(): number | null {
@@ -160,21 +153,20 @@ export class DashboardComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.typeFilter.subscribe(() => this.buildRows());
     timer(0, 10_000).pipe(
-      switchMap(() => from(this.reload())),
+      switchMap(() => this.reload()),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({ error: () => this.error.set(true) });
   }
 
   async reload(): Promise<void> {
     try {
-      const [status, instruments, latest, signals] = await forkJoin([
+      const [status, instruments, latest, signals] = await firstValueFrom(forkJoin([
         this.api.status(),
         this.api.instruments(),
         this.api.latestIndicators('1h'),
         this.api.signals(20)
-      ]).toPromise();
+      ]));
       this.status.set(status);
       this.instruments.set(instruments);
       this.latest.set(latest);
@@ -187,6 +179,11 @@ export class DashboardComponent implements OnInit {
     }
   }
 
+  setTypeFilter(value: string): void {
+    this.typeFilter.set(value);
+    this.buildRows();
+  }
+
   private buildRows(): void {
     const byFigi = new Map(this.latest().map((l) => [l.figi, l]));
     const rows = this.instruments().map((inst) => {
@@ -197,7 +194,6 @@ export class DashboardComponent implements OnInit {
         figi: inst.figi,
         ticker: inst.ticker,
         type: inst.type,
-        price: null,
         ao: typeof ao['ao'] === 'number' ? ao['ao'] : null,
         state: String(all['state'] ?? 'SLEEPING')
       };
@@ -215,8 +211,8 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  openChart(figi: string): void {
-    void this.router.navigate(['/chart', figi]);
+  openChart(ticker: string): void {
+    void this.router.navigate(['/chart', ticker]);
   }
 }
 
@@ -224,7 +220,6 @@ interface Row {
   figi: string;
   ticker: string;
   type: string;
-  price: number | null;
   ao: number | null;
   state: string;
 }

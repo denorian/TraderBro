@@ -8,15 +8,12 @@ import com.traderbro.core.domain.enums.ComponentStatus;
 import com.traderbro.core.domain.spi.BrokerGateway;
 import com.traderbro.core.domain.spi.OrderStore;
 import com.traderbro.core.domain.spi.PortfolioProvider;
-import com.traderbro.core.backtest.BacktestReport;
 import com.traderbro.execution.killswitch.KillSwitch;
-import com.traderbro.storage.BacktestRunRepository;
 import com.traderbro.storage.SignalRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,7 +35,6 @@ public class MonitoringController {
     private final PortfolioProvider portfolioProvider;
     private final OrderStore orderStore;
     private final SignalRepository signalRepository;
-    private final BacktestRunRepository backtestRunRepository;
 
     public record ComponentStatusDto(ComponentStatus status, String detail) {}
 
@@ -75,10 +71,5 @@ public class MonitoringController {
     public List<Order> orders(@RequestParam(required = false) LocalDate date) {
         // date filtering is applied in storage for terminal histories; open orders returned here.
         return orderStore.findOpen();
-    }
-
-    @GetMapping("/backtests/{id}")
-    public Optional<BacktestReport> backtest(@PathVariable String id) {
-        return backtestRunRepository.findById(id);
     }
 }

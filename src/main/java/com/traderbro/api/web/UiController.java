@@ -3,6 +3,7 @@ package com.traderbro.api.web;
 import com.traderbro.api.config.StreamHealth;
 import com.traderbro.core.domain.Bar;
 import com.traderbro.core.domain.IndicatorSnapshot;
+import com.traderbro.core.domain.Instrument;
 import com.traderbro.core.domain.enums.CandleInterval;
 import com.traderbro.core.domain.spi.BarStore;
 import com.traderbro.core.indicators.AlligatorIndicator;
@@ -74,15 +75,19 @@ public class UiController {
 
     /**
      * Candles plus the Alligator (3 lines) and Awesome Oscillator for one instrument/timeframe.
-     * Lines are computed deterministically from the bars so the chart is always correct even
-     * before the snapshot catch-up has populated {@code indicator_snapshots}.
+     * The path param is the human-readable <b>ticker</b> (e.g. SBER, MXU7); it is resolved to a
+     * FIGI before loading bars. Lines are computed deterministically from the bars so the chart is
+     * always correct even before the snapshot catch-up has populated {@code indicator_snapshots}.
      */
-    @GetMapping("/chart/{figi}")
-    public ChartResponse chart(@PathVariable String figi,
+    @GetMapping("/chart/{ticker}")
+    public ChartResponse chart(@PathVariable String ticker,
                                @RequestParam(defaultValue = "1h") String interval,
                                @RequestParam(required = false) Instant from,
                                @RequestParam(required = false) Instant to,
                                @RequestParam(defaultValue = "500") int limit) {
+        String figi = instruments.findByTicker(ticker)
+                .map(Instrument::getFigi)
+                .orElseThrow(() -> new IllegalArgumentException("unknown ticker: " + ticker));
         CandleInterval tf = parseInterval(interval);
         Instant end = to != null ? to : Instant.now();
         Instant start = from != null ? from : end.minus(
