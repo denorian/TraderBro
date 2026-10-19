@@ -1,0 +1,9 @@
+${levelMark} <b>ДИВЕРГЕНЦИЯ AO («ДВА ПИКА») ПОДТВЕРЖДЕНА ${dirIcon}</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b> (${interval})
+Направление: ${direction}, степень: <code>${degree}</code> (${degreeLabel})
+Пики AO: <code>${aoPeaks}</code> — оба по одну сторону нуля
+Цена на пиках: <code>${priceAtPeaks}</code> (новый экстремум)
+Сила: <code>${strength}</code>
+Ангуляция к синей линии: <code>${angulation}</code>
+Время: <code>${ts}</code>

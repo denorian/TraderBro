@@ -1,0 +1,7 @@
+${levelMark} <b>АНГУЛЯЦИЯ К СИНЕЙ ЛИНИИ</b>
+━━━━━━━━━━━━━━━
+Инструмент: <b>${ticker}</b> (${interval})
+Уход цены: ${direction} — <code>${angleAtr} ATR/бар</code>
+Slope цены: <code>${priceSlope}</code> ATR/бар · Slope Jaw: <code>${jawSlope}</code> ATR/бар
+Окно [anchor → пик]: <code>${bars}</code> баров
+Время: <code>${ts}</code>
