@@ -75,6 +75,14 @@ public class BarRepository implements BarStore {
         return Boolean.TRUE.equals(exists);
     }
 
+    @Override
+    public java.util.Optional<Instant> latestTs(String figi, CandleInterval interval) {
+        String sql = "SELECT max(ts) FROM bars WHERE figi = ? AND interval = ?";
+        java.sql.Timestamp ts = jdbc.queryForObject(sql, java.sql.Timestamp.class,
+                figi, interval.name());
+        return java.util.Optional.ofNullable(ts).map(java.sql.Timestamp::toInstant);
+    }
+
     private final class BarMapper implements RowMapper<Bar> {
         @Override
         public Bar mapRow(ResultSet rs, int rowNum) throws SQLException {

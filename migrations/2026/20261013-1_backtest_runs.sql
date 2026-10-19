@@ -82,3 +82,15 @@ CREATE TABLE backtest_equity (
 );
 CREATE INDEX idx_bt_equity_run ON backtest_equity (run_id, strategy_id, figi);
 --rollback DROP TABLE backtest_equity;
+
+--changeset a.s.brovko:20261013-6
+--comment Batch header no longer carries a single pair's params/metrics (moved to backtest_pair_results).
+ALTER TABLE backtest_runs ALTER COLUMN params DROP NOT NULL;
+ALTER TABLE backtest_runs ALTER COLUMN metrics DROP NOT NULL;
+--rollback ALTER TABLE backtest_runs ALTER COLUMN metrics SET NOT NULL;
+--rollback ALTER TABLE backtest_runs ALTER COLUMN params SET NOT NULL;
+
+--changeset a.s.brovko:20261013-7
+--comment Batch header is instrument-agnostic; instrument_type lives per pair in backtest_pair_results.
+ALTER TABLE backtest_runs ALTER COLUMN instrument_type DROP NOT NULL;
+--rollback ALTER TABLE backtest_runs ALTER COLUMN instrument_type SET NOT NULL;

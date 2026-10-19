@@ -18,6 +18,7 @@ import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.ta4j.core.BarSeries;
+import org.ta4j.core.indicators.ATRIndicator;
 import org.ta4j.core.num.DoubleNum;
 
 /**
@@ -42,6 +43,8 @@ public class IndicatorSnapshotService {
     private final BarStore barStore;
     private final InstrumentRepository instruments;
     private final IndicatorSnapshotRepository snapshots;
+    private final AngulationDetector angulationDetector;
+    private final com.traderbro.core.williams.WilliamsEventDetector williams;
     private final int retentionDays;
     private final List<CandleInterval> timeframes;
     private final int maxBars;
@@ -50,11 +53,15 @@ public class IndicatorSnapshotService {
     public IndicatorSnapshotService(IndicatorFactory factory, BarStore barStore,
                                     InstrumentRepository instruments,
                                     IndicatorSnapshotRepository snapshots,
+                                    AngulationDetector angulationDetector,
+                                    com.traderbro.core.williams.WilliamsEventDetector williams,
                                     IndicatorsProperties props, int maxBars) {
         this.factory = factory;
         this.barStore = barStore;
         this.instruments = instruments;
         this.snapshots = snapshots;
+        this.angulationDetector = angulationDetector;
+        this.williams = williams;
         this.retentionDays = props.getSnapshotRetentionDays();
         this.timeframes = props.getSnapshotTimeframes().stream()
                 .map(CandleInterval::valueOf)
@@ -111,6 +118,8 @@ public class IndicatorSnapshotService {
             snapshots.upsertAll(missing);
             log.debug("snapshots computed for {} {} : {} rows", figi, tf, missing.size());
         }
+        // Event detectors (AO Twin Peaks divergence + angulation) run on the same closed-bar window.
+        williams.detect(figi, tf, bars);
     }
 
     private List<IndicatorSnapshot> computeMissing(String figi, CandleInterval tf,
@@ -118,6 +127,7 @@ public class IndicatorSnapshotService {
         BarSeries series = SeriesFactory.fromDomain(bars, DoubleNum::valueOf, maxBars, figi);
         AlligatorIndicator alligator = factory.alligator(series);
         AwesomeOscillatorIndicator ao = factory.awesomeOscillator(series);
+        ATRIndicator atr = alligator.getAtr();
         List<IndicatorSnapshot> out = new java.util.ArrayList<>();
         for (int i = 0; i < series.getBarCount(); i++) {
             Bar bar = bars.get(i);
@@ -126,6 +136,7 @@ public class IndicatorSnapshotService {
             }
             out.add(alligatorSnapshot(figi, tf, bar, alligator, i));
             out.add(aoSnapshot(figi, tf, bar, ao, i));
+            out.add(angulationSnapshot(figi, tf, bar, alligator, atr, i));
         }
         return out;
     }
@@ -156,6 +167,21 @@ public class IndicatorSnapshotService {
         values.put("zero_cross_up", i >= 1 && !ao.isAboveZero(i - 1) && ao.isAboveZero(i));
         values.put("zero_cross_down", i >= 1 && ao.isAboveZero(i - 1) && !ao.isAboveZero(i));
         return snapshot(figi, tf, bar, IndicatorSnapshot.IndicatorKind.AO, values);
+    }
+
+    private IndicatorSnapshot angulationSnapshot(String figi, CandleInterval tf, Bar bar,
+                                             AlligatorIndicator alligator, ATRIndicator atr,
+                                             int i) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        angulationDetector.angleAt(barSeriesOf(alligator), alligator, atr, i, tf).ifPresent(a -> {
+            values.put("angle_atr", round2(a.angleAtr()));
+            values.put("direction", a.direction().name());
+        });
+        return snapshot(figi, tf, bar, IndicatorSnapshot.IndicatorKind.ANGULATION, values);
+    }
+
+    private static BarSeries barSeriesOf(AlligatorIndicator alligator) {
+        return alligator.getBarSeries();
     }
 
     private IndicatorSnapshot snapshot(String figi, CandleInterval tf, Bar bar,

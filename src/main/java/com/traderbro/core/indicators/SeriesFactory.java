@@ -30,6 +30,7 @@ public final class SeriesFactory {
             case FIVE_MIN -> Duration.ofMinutes(5);
             case FIFTEEN_MIN -> Duration.ofMinutes(15);
             case ONE_HOUR -> Duration.ofHours(1);
+            case FOUR_HOUR -> Duration.ofHours(4);
             case ONE_DAY -> Duration.ofDays(1);
         };
     }
@@ -50,6 +51,11 @@ public final class SeriesFactory {
                 continue;
             }
             ta4jBars.add(toTa4jBar(bar, numFactory));
+        }
+        // Cap up-front: handing BaseBarSeriesBuilder more bars than maxBarCount makes ta4j
+        // misreport indices (every bar resolves to the same one). Keep the most recent maxBars.
+        if (ta4jBars.size() > maxBars) {
+            ta4jBars = new java.util.ArrayList<>(ta4jBars.subList(ta4jBars.size() - maxBars, ta4jBars.size()));
         }
         // withBars derives the series numFactory from the first bar, so the series type always
         // matches the bar type (the default DecimalNum would otherwise reject DoubleNum bars).

@@ -61,6 +61,21 @@ class BacktestControllerTest {
     }
 
     @Test
+    void createAcceptsPartialRequestLikeUi() throws Exception {
+        // The UI omits walk-forward windows and capital/position costs; these must default
+        // server-side instead of failing JSON deserialization (regression: 400 on primitives).
+        String body = """
+                {"strategyIds":["SmaCrossStrategy"],"figis":["BBG004730RP0"],
+                 "interval":"ONE_DAY","from":"2025-10-13T00:00:00Z","to":"2026-10-13T23:59:59Z",
+                 "costs":{"commissionPct":0.0005,"slippageBps":5},"walkForward":false}
+                """;
+        when(orchestrator.submit(any(BacktestRequest.class))).thenReturn("run-ui");
+        mvc.perform(post("/api/backtests").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.id").value("run-ui"));
+    }
+
+    @Test
     void createRejectsEmptyStrategyList() throws Exception {
         String body = """
                 {"strategyIds":[],"figis":["BBG004730RP0"],"interval":"ONE_HOUR",

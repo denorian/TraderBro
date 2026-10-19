@@ -29,6 +29,7 @@ public class IndicatorSnapshot {
     /** Which Williams indicator the snapshot carries. */
     public enum IndicatorKind {
         ALLIGATOR,
-        AO
+        AO,
+        ANGULATION
     }
 }

@@ -47,6 +47,41 @@ export interface LatestIndicatorDto {
   ts: string | null;
   alligator: Record<string, unknown>;
   ao: Record<string, unknown>;
+  angulationAngleAtr?: number | null;
+  angulationDirection?: string | null;
+}
+
+export interface DivergenceEventDto {
+  id: string;
+  figi: string;
+  interval: string;
+  ts: string;
+  direction: 'BULLISH' | 'BEARISH';
+  degree: number;
+  aoPeak1Ts: string;
+  aoPeak1Value: number;
+  aoPeak2Ts: string;
+  aoPeak2Value: number;
+  priceAtPeak1: number;
+  priceAtPeak2: number;
+  strength: number;
+  status: 'UNCONFIRMED' | 'CONFIRMED' | 'EXPIRED';
+  confirmedAt: string | null;
+  createdAt: string;
+}
+
+export interface AngulationEventDto {
+  figi: string;
+  interval: string;
+  ts: string;
+  divergenceEventId: string;
+  direction: 'AWAY_UP' | 'AWAY_DOWN';
+  priceSlopeAtr: number;
+  jawSlopeAtr: number;
+  angleAtr: number;
+  anchorTs: string;
+  barsInWindow: number;
+  createdAt: string;
 }
 
 export interface ComponentStatusDto {
@@ -56,10 +91,12 @@ export interface ComponentStatusDto {
 
 export interface PositionDto {
   figi: string;
-  quantity: number;
+  lots: number;
+  shares: number;
   averagePrice?: number;
   currentPrice?: number;
-  expectedYield?: number;
+  ticker?: string;
+  name?: string;
 }
 
 export interface PortfolioDto {
@@ -104,7 +141,7 @@ export interface BacktestCosts {
 export interface BacktestRequest {
   strategyIds: string[];
   figis: string[];
-  interval: 'FIFTEEN_MIN' | 'ONE_HOUR' | 'ONE_DAY';
+  interval: 'FIFTEEN_MIN' | 'ONE_HOUR' | 'FOUR_HOUR' | 'ONE_DAY';
   from: string;
   to: string;
   costs?: BacktestCosts;

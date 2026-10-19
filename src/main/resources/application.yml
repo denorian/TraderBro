@@ -11,7 +11,7 @@ app:
   history:
     load-on-startup: ${HISTORY_LOAD_ON_STARTUP:false}
     daily-years: 3
-    intraday-days: 90
+    intraday-days: 400
     intraday-interval: FIFTEEN_MIN
 
 tbank:
@@ -21,9 +21,10 @@ tbank:
   retry:
     max-attempts: 3
     initial-backoff: 500ms
+  rate-limit-per-min: 20
 
 instruments:
-  tickers: [SBER, GAZP, LKOH, YDEX, VTBR, T, PLZL, NVTK, ROSN, TATN, GMKN, MOEX, X5]
+  tickers: [SBER, GAZP, LKOH, YDEX, VTBR, TCSG, PLZL, NVTK, ROSN, TATN, GMKN, MOEX, X5, SIBN, TRNFP, SPBE]
 
 strategies:
   SmaCrossStrategy:
@@ -59,6 +60,13 @@ strategies:
       stopLookback: "5"
       allowShort: "true"
       atrPeriod: "14"
+  ao-divergence:
+    enabled: false
+    timeframes: [FIFTEEN_MIN, ONE_HOUR]
+    stop-buffer-atr: 0.3
+    risk-capital-pct: 1
+    allow-short: true
+    atr-period: 14
 
 indicators:
   alligator:
@@ -74,10 +82,22 @@ indicators:
     fast: 5
     slow: 34
   snapshot-retention-days: 90
-  snapshot-timeframes: [FIFTEEN_MIN, ONE_HOUR, ONE_DAY]
+  snapshot-timeframes: [FIFTEEN_MIN, ONE_HOUR, FOUR_HOUR, ONE_DAY]
   recent-catchup-hours: 48
   catch-up-ms: 300000
   retention-cron: "0 15 3 * * *"
+
+williams:
+  divergence:
+    ao-peak-window: 2
+    min-peak-distance: 5
+    max-peak-distance: 60
+    min-peak-abs-atr: 0.2
+    confirm-bars: 10
+  angulation:
+    lookback-bars: 60
+    threshold-atr-per-bar: 0.05
+    events-lookback-bars: 30
 
 ui:
   enabled: true
@@ -105,7 +125,8 @@ futures:
   enabled: true
   # Basic assets matched against the SDK's Future.basicAsset. IMOEX corresponds to the
   # MIX contract (MOEX index futures); the traded ticker differs from the basic asset.
-  basic-assets: [IMOEX, BR, GOLD, CR]
+  # Currently empty: futures are disabled until re-enabled.
+  basic-assets: []
   min-days-to-expiry: 7
   rollover-days-before: 5
   no-new-positions-days-before-expiry: 2

@@ -13,6 +13,19 @@ strategies × instruments from the UI, compare runs, and pin ENTRY/EXIT signals 
 price chart. Backtests run in an isolated thread pool and **never touch the live trading path**
 (no writes to `orders`/`positions`, no `BrokerGateway` calls).
 
+Stage 3.4 adds the **Bill Williams event detectors** as formalised, measurable signals (no Elliott
+wave counting):
+- **AO "Twin Peaks" divergence** (`AoTwinPeaksDetector`) — two consecutive AO extrema on the same
+  side of zero where the second is weaker while price updates its extremum. Persisted to
+  `divergence_events`, pinned on the chart, shown on the Dashboard, and pushed to Telegram.
+- **Angulation** (`AngulationDetector`) — the "visceral angle" of price departing from the blue Jaw
+  line, measured on the window from the last Jaw touch to the divergence's extreme peak, normalised
+  to ATR per bar. Event-driven (`angulation_events`) plus a per-bar background snapshot
+  (`indicator_snapshots` kind `ANGULATION`).
+- `AlligatorAoStrategy` reversal (saucer) entries are now gated on angulation
+  (`NO_ANGULATION` filter); a new `AoDivergenceReversalStrategy` is available behind the
+  `strategies.ao-divergence.enabled` flag (off until a walk-forward backtest validates it).
+
 > LLM layers are explicitly out of scope. They plug in later via the `SignalFilter` seam
 > (`NoOpSignalFilter` ships as the no-op implementation).
 
@@ -153,6 +166,9 @@ export TRADING_LIVE_ACK=I_UNDERSTAND_RISK
 | GET | `/api/backtests/{id}/trades?figi=&strategyId=` | run trades |
 | GET | `/api/backtests/compare?ids=..` | comparative metrics table (up to 5 runs) |
 | DELETE | `/api/backtests/{id}` | cancel (QUEUED/RUNNING) or delete a run |
+| GET | `/api/divergences?figi=&interval=&from=&to=&status=` | AO "Twin Peaks" events (paginated) |
+| GET | `/api/divergences/latest?interval=` | latest divergence per instrument |
+| GET | `/api/angulation?figi=&interval=` | angulation events (price vs Jaw) |
 | POST | `/api/killswitch/activate` | body `{"confirm":true}` |
 | POST | `/api/killswitch/deactivate` | body `{"confirm":true}` (manual only) |
 
@@ -180,6 +196,20 @@ Key stage-3.2 additions (`backtest.*`):
 | `backtest.max-signals-per-run` | sanity cap on stored signals (100000) |
 | `backtest.results-retention-days` | retention for purge scheduler (180) |
 | `backtest.walk-forward.{train-days,test-days}` | walk-forward window defaults (180/60) |
+
+Key stage-3.4 additions (`williams.*` and `strategies.ao-divergence.*`):
+
+| Key | Purpose |
+|---|---|
+| `williams.divergence.ao-peak-window` | bars right of an AO extremum needed to confirm it (2) |
+| `williams.divergence.min/max-peak-distance` | min/max bars between the two peaks (5/60) |
+| `williams.divergence.min-peak-abs-atr` | min first-peak amplitude in ATR (0.2) |
+| `williams.divergence.confirm-bars` | confirmation window after the extreme peak (10) |
+| `williams.angulation.lookback-bars` | Jaw-touch search depth for the anchor (60) |
+| `williams.angulation.threshold-atr-per-bar` | min \|price−jaw\| slope gap in ATR/bar (0.1) |
+| `williams.angulation.events-lookback-bars` | how long an angulation event stays fresh (30) |
+| `strategies.ao-divergence.enabled` | off until validated by a walk-forward backtest (false) |
+| `strategies.ao-divergence.{timeframes,stop-buffer-atr,risk-capital-pct,allow-short}` | reversal-strategy params |
 
 ### Telegram setup
 

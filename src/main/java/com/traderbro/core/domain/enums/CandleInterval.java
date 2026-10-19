@@ -9,5 +9,6 @@ public enum CandleInterval {
     FIVE_MIN,
     FIFTEEN_MIN,
     ONE_HOUR,
+    FOUR_HOUR,
     ONE_DAY
 }

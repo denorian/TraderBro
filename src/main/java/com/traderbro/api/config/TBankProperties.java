@@ -16,6 +16,9 @@ public class TBankProperties {
     /** Target endpoint override (production vs sandbox domain). */
     private String target = "invest-public-api.tinkoff.ru";
     private Duration timeout = Duration.ofSeconds(10);
+    /** Max unary (read) API requests per minute; keeps HistoryLoader under the broker's
+     * per-minute limit (error 80002) so backfills complete without dropped instruments. */
+    private int rateLimitPerMin = 20;
     private Retry retry = new Retry();
 
     @Getter

@@ -45,13 +45,15 @@ public class TBankMarketDataProvider implements MarketDataProvider {
     private final SdkInstrumentMapper instrumentMapper;
     private final int historyMaxCandles;
     private final RetryPolicy retryPolicy;
+    private final ApiRateLimiter rateLimiter;
     private final AtomicBoolean degraded = new AtomicBoolean(false);
     private final List<StreamSubscriptionImpl> subscriptions = new ArrayList<>();
     private final java.util.concurrent.atomic.AtomicInteger streamIdCounter = new java.util.concurrent.atomic.AtomicInteger();
 
     public TBankMarketDataProvider(InvestApi api, SdkBarMapper barMapper,
                                    SdkInstrumentMapper instrumentMapper,
-                                   int historyMaxCandles, RetryPolicy retryPolicy) {
+                                   int historyMaxCandles, RetryPolicy retryPolicy,
+                                   ApiRateLimiter rateLimiter) {
         this.marketDataService = api.getMarketDataService();
         this.instrumentsService = api.getInstrumentsService();
         this.streamService = api.getMarketDataStreamService();
@@ -59,12 +61,14 @@ public class TBankMarketDataProvider implements MarketDataProvider {
         this.instrumentMapper = instrumentMapper;
         this.historyMaxCandles = historyMaxCandles;
         this.retryPolicy = retryPolicy;
+        this.rateLimiter = rateLimiter;
     }
 
     @Override
     public List<Bar> getHistory(String figi, Instant from, Instant to, CandleInterval interval) {
         List<Bar> result = new ArrayList<>();
         for (HistoryChunker.Chunk chunk : HistoryChunker.chunk(from, to, interval, historyMaxCandles)) {
+            rateLimiter.acquire();
             List<HistoricCandle> candles = withRetry(() ->
                     marketDataService.getCandlesSync(figi, chunk.start(), chunk.end(), toSdk(interval)),
                     "getHistory." + figi);
@@ -216,6 +220,7 @@ public class TBankMarketDataProvider implements MarketDataProvider {
             case FIVE_MIN -> ru.tinkoff.piapi.contract.v1.CandleInterval.CANDLE_INTERVAL_5_MIN;
             case FIFTEEN_MIN -> ru.tinkoff.piapi.contract.v1.CandleInterval.CANDLE_INTERVAL_15_MIN;
             case ONE_HOUR -> ru.tinkoff.piapi.contract.v1.CandleInterval.CANDLE_INTERVAL_HOUR;
+            case FOUR_HOUR -> ru.tinkoff.piapi.contract.v1.CandleInterval.CANDLE_INTERVAL_4_HOUR;
             case ONE_DAY -> ru.tinkoff.piapi.contract.v1.CandleInterval.CANDLE_INTERVAL_DAY;
         };
     }
@@ -227,6 +232,7 @@ public class TBankMarketDataProvider implements MarketDataProvider {
             case FIVE_MIN -> SubscriptionInterval.SUBSCRIPTION_INTERVAL_FIVE_MINUTES;
             case FIFTEEN_MIN -> SubscriptionInterval.SUBSCRIPTION_INTERVAL_FIFTEEN_MINUTES;
             case ONE_HOUR -> SubscriptionInterval.SUBSCRIPTION_INTERVAL_ONE_HOUR;
+            case FOUR_HOUR -> SubscriptionInterval.SUBSCRIPTION_INTERVAL_4_HOUR;
             case ONE_DAY -> SubscriptionInterval.SUBSCRIPTION_INTERVAL_ONE_DAY;
         };
     }

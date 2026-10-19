@@ -5,6 +5,7 @@ import com.traderbro.core.domain.enums.Direction;
 import com.traderbro.core.domain.spi.SignalFilter;
 import com.traderbro.core.indicators.AlligatorIndicator;
 import com.traderbro.core.indicators.AlligatorIndicator.AlligatorState;
+import com.traderbro.core.indicators.AngulationDetector;
 import com.traderbro.core.indicators.AwesomeOscillatorIndicator;
 import com.traderbro.core.indicators.FractalIndicator;
 import com.traderbro.core.indicators.IndicatorFactory;
@@ -47,10 +48,20 @@ public class AlligatorAoStrategy extends AbstractTradingStrategy {
     public static final String DEFAULT_SLOW = "34";
 
     private final IndicatorFactory.AlligatorParams alligator;
+    /** Optional angulation gate for reversal (saucer) entries; null disables the filter. */
+    private final AngulationDetector angulation;
+    private final double angulationThreshold;
 
     public AlligatorAoStrategy(int moneyScale, IndicatorFactory.AlligatorParams alligator) {
+        this(moneyScale, alligator, null, 0.0);
+    }
+
+    public AlligatorAoStrategy(int moneyScale, IndicatorFactory.AlligatorParams alligator,
+                               AngulationDetector angulation, double angulationThreshold) {
         super(moneyScale);
         this.alligator = alligator;
+        this.angulation = angulation;
+        this.angulationThreshold = angulationThreshold;
     }
 
     @Override
@@ -118,20 +129,31 @@ public class AlligatorAoStrategy extends AbstractTradingStrategy {
         }
         AlligatorState state = all.state(last);
         Direction direction = null;
+        boolean saucerTrigger = false;
 
         boolean bullState = state == AlligatorState.AWAKENING || state == AlligatorState.EATING_BULL;
         boolean bullTrigger = zeroCrossUp(ao, last) || ao.isBullishSaucer(last);
         if (bullState && bullTrigger) {
             direction = Direction.LONG;
+            saucerTrigger = ao.isBullishSaucer(last);
         } else if (p.allowShort()) {
             boolean bearState = state == AlligatorState.AWAKENING || state == AlligatorState.EATING_BEAR;
             boolean bearTrigger = zeroCrossDown(ao, last) || ao.isBearishSaucer(last);
             if (bearState && bearTrigger) {
                 direction = Direction.SHORT;
+                saucerTrigger = ao.isBearishSaucer(last);
             }
         }
         if (direction == null) {
             return Optional.empty();
+        }
+
+        // Reversal (saucer) entries are only valid with angulation away from the blue Jaw line;
+        // without it Williams deems the reversal invalid → filter it out.
+        if (saucerTrigger && angulation != null && !hasAngulation(series, all)) {
+            Map<String, Object> snap = newSnapshot();
+            snap.put("state", state.name());
+            return Optional.of(filteredSignal(series, direction, "NO_ANGULATION"));
         }
 
         Map<String, Object> snap = newSnapshot();
@@ -149,6 +171,27 @@ public class AlligatorAoStrategy extends AbstractTradingStrategy {
 
     private static Double num(org.ta4j.core.num.Num v) {
         return v == null ? null : v.doubleValue();
+    }
+
+    /** Whether the current background angulation away from the Jaw is at/above the threshold. */
+    private boolean hasAngulation(BarSeries series, AlligatorIndicator all) {
+        return angulation.backgroundAngle(series, all, all.getAtr(), intervalOf(series))
+                .map(a -> a.angleAtr() >= angulationThreshold)
+                .orElse(false);
+    }
+
+    private static com.traderbro.core.domain.enums.CandleInterval intervalOf(BarSeries series) {
+        if (series.isEmpty()) {
+            return com.traderbro.core.domain.enums.CandleInterval.ONE_HOUR;
+        }
+        long minutes = series.getBar(0).getTimePeriod().toMinutes();
+        if (minutes <= 15) {
+            return com.traderbro.core.domain.enums.CandleInterval.FIFTEEN_MIN;
+        }
+        if (minutes <= 60) {
+            return com.traderbro.core.domain.enums.CandleInterval.ONE_HOUR;
+        }
+        return com.traderbro.core.domain.enums.CandleInterval.ONE_DAY;
     }
 
     private static boolean zeroCrossUp(AwesomeOscillatorIndicator ao, int i) {

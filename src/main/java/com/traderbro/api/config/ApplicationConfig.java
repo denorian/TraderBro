@@ -27,9 +27,12 @@ import com.traderbro.core.risk.RiskConfig;
 import com.traderbro.core.risk.RiskGate;
 import com.traderbro.core.risk.RiskRule;
 import com.traderbro.core.risk.TradingWindowRule;
+import com.traderbro.core.indicators.AngulationDetector;
+import com.traderbro.core.indicators.AoTwinPeaksDetector;
 import com.traderbro.core.indicators.IndicatorFactory;
 import com.traderbro.core.indicators.IndicatorSnapshotService;
 import com.traderbro.core.strategies.AlligatorAoStrategy;
+import com.traderbro.core.strategies.AoDivergenceReversalStrategy;
 import com.traderbro.core.strategies.BollingerMeanReversionStrategy;
 import com.traderbro.core.strategies.DonchianBreakoutStrategy;
 import com.traderbro.core.strategies.EmaMomentumStrategy;
@@ -38,6 +41,8 @@ import com.traderbro.core.strategies.PositionSizer;
 import com.traderbro.core.strategies.SmaCrossStrategy;
 import com.traderbro.core.strategies.StrategyRegistry;
 import com.traderbro.core.strategies.TradingStrategy;
+import com.traderbro.core.williams.WilliamsContextService;
+import com.traderbro.core.williams.WilliamsEventDetector;
 import com.traderbro.core.event.TraderEventPublisher;
 import com.traderbro.data.mapper.SdkBarMapper;
 import com.traderbro.data.mapper.SdkInstrumentMapper;
@@ -46,6 +51,7 @@ import com.traderbro.data.tbank.HistoryLoader;
 import com.traderbro.data.tbank.RetryPolicy;
 import com.traderbro.data.tbank.TBankBrokerGateway;
 import com.traderbro.data.tbank.TBankMarketDataProvider;
+import com.traderbro.data.tbank.ApiRateLimiter;
 import com.traderbro.data.tbank.TBankOrderEventSource;
 import com.traderbro.execution.killswitch.KillSwitch;
 import com.traderbro.execution.order.OrderManager;
@@ -63,7 +69,9 @@ import com.traderbro.scheduler.SignalEngine;
 import com.traderbro.scheduler.StrategyReloadScheduler;
 import com.traderbro.scheduler.StreamManager;
 import com.traderbro.storage.AuditEventRepository;
+import com.traderbro.storage.AngulationEventRepository;
 import com.traderbro.storage.BacktestRunRepository;
+import com.traderbro.storage.DivergenceEventRepository;
 import com.traderbro.storage.InstrumentRepository;
 import com.traderbro.storage.PortfolioSnapshotRepository;
 import com.traderbro.storage.SignalRepository;
@@ -89,7 +97,8 @@ import ru.tinkoff.piapi.core.InvestApi;
 @EnableScheduling
 @EnableConfigurationProperties({AppProperties.class, TBankProperties.class,
         RiskProperties.class, ExecutionProperties.class, FuturesProperties.class,
-        IndicatorsProperties.class, BacktestProperties.class,
+        IndicatorsProperties.class, BacktestProperties.class, InstrumentsProperties.class,
+        WilliamsProperties.class, AoDivergenceProperties.class,
         com.traderbro.notify.telegram.TelegramProperties.class})
 public class ApplicationConfig {
 
@@ -127,8 +136,9 @@ public class ApplicationConfig {
     @Bean
     public MarketDataProvider marketDataProvider(InvestApi api, SdkBarMapper barMapper,
                                                  SdkInstrumentMapper instMapper, AppProperties app,
-                                                 RetryPolicy retryPolicy) {
-        return new TBankMarketDataProvider(api, barMapper, instMapper, 500, retryPolicy);
+                                                 RetryPolicy retryPolicy, TBankProperties tbank) {
+        return new TBankMarketDataProvider(api, barMapper, instMapper, 500, retryPolicy,
+                new ApiRateLimiter(tbank.getRateLimitPerMin()));
     }
 
     @Bean
@@ -204,12 +214,22 @@ public class ApplicationConfig {
 
     @Bean
     public List<TradingStrategy> tradingStrategies(AppProperties app,
-                                                   IndicatorFactory indicatorFactory) {
-        return List.of(new SmaCrossStrategy(app.getMoneyScale()),
+                                                   IndicatorFactory indicatorFactory,
+                                                   AngulationDetector angulationDetector,
+                                                   AoTwinPeaksDetector twinPeaks,
+                                                   WilliamsProperties williams,
+                                                   AoDivergenceProperties aoDiv) {
+        List<TradingStrategy> list = new ArrayList<>(List.of(
+                new SmaCrossStrategy(app.getMoneyScale()),
                 new EmaMomentumStrategy(app.getMoneyScale()),
                 new BollingerMeanReversionStrategy(app.getMoneyScale()),
                 new DonchianBreakoutStrategy(app.getMoneyScale()),
-                new AlligatorAoStrategy(app.getMoneyScale(), indicatorFactory.getAlligator()));
+                new AlligatorAoStrategy(app.getMoneyScale(), indicatorFactory.getAlligator(),
+                        angulationDetector, williams.getAngulation().getThresholdAtrPerBar()),
+                new AoDivergenceReversalStrategy(app.getMoneyScale(), twinPeaks,
+                        angulationDetector, aoDiv.isAllowShort(), aoDiv.getAtrPeriod(),
+                        williams.getAngulation().getLookbackBars())));
+        return list;
     }
 
     @Bean
@@ -246,10 +266,46 @@ public class ApplicationConfig {
                                                              BarStore barStore,
                                                              InstrumentRepository instruments,
                                                              com.traderbro.storage.IndicatorSnapshotRepository snapshotRepo,
+                                                             AngulationDetector angulationDetector,
+                                                             WilliamsEventDetector williams,
                                                              IndicatorsProperties props,
                                                              AppProperties app) {
         return new IndicatorSnapshotService(factory, barStore, instruments, snapshotRepo,
-                props, app.getMaxBarsInMemory());
+                angulationDetector, williams, props, app.getMaxBarsInMemory());
+    }
+
+    // ------------------------------------------------------------------ Williams event detectors
+    @Bean
+    public AoTwinPeaksDetector twinPeaksDetector(WilliamsProperties props) {
+        return new AoTwinPeaksDetector(props.getDivergence());
+    }
+
+    @Bean
+    public AngulationDetector angulationDetector(WilliamsProperties props) {
+        return new AngulationDetector(props.getAngulation());
+    }
+
+    @Bean
+    public WilliamsEventDetector williamsEventDetector(IndicatorFactory factory,
+                                                       AoTwinPeaksDetector twinPeaks,
+                                                       AngulationDetector angulationDetector,
+                                                       DivergenceEventRepository divergences,
+                                                       AngulationEventRepository angulations,
+                                                       InstrumentRepository instruments,
+                                                       TraderEventPublisher publisher,
+                                                       AppProperties app) {
+        return new WilliamsEventDetector(factory, twinPeaks, angulationDetector, divergences,
+                angulations, instruments, publisher, app.getMaxBarsInMemory());
+    }
+
+    @Bean
+    public WilliamsContextService williamsContextService(IndicatorFactory factory,
+                                                         AngulationDetector angulationDetector,
+                                                         DivergenceEventRepository divergences,
+                                                         AngulationEventRepository angulations,
+                                                         BarStore barStore, AppProperties app) {
+        return new WilliamsContextService(factory, angulationDetector, divergences, angulations,
+                barStore, app.getMaxBarsInMemory());
     }
 
     // ------------------------------------------------------------------ notification
@@ -381,8 +437,8 @@ public class ApplicationConfig {
     @Bean
     public InstrumentRefreshScheduler instrumentRefreshScheduler(MarketDataProvider md,
                                                                  InstrumentRepository repo,
-                                                                 AppProperties app) {
-        return new InstrumentRefreshScheduler(md, repo, List.of("SBER", "GAZP", "LKOH", "YDEX", "VTBR"));
+                                                                 InstrumentsProperties instruments) {
+        return new InstrumentRefreshScheduler(md, repo, instruments.getTickers());
     }
 
     @Bean
@@ -407,12 +463,12 @@ public class ApplicationConfig {
 
     // ------------------------------------------------------------------ history loader
     @Bean
-    public HistoryLoadConfig historyLoadConfig(AppProperties app) {
+    public HistoryLoadConfig historyLoadConfig(AppProperties app, InstrumentsProperties instruments) {
         return new HistoryLoadConfig(app.getHistory().isLoadOnStartup(),
-                List.of("SBER", "GAZP", "LKOH", "YDEX", "VTBR"),
+                instruments.getTickers(),
                 app.getHistory().getDailyYears(), app.getHistory().getIntradayDays(),
                 CandleInterval.valueOf(app.getHistory().getIntradayInterval()),
-                List.of(CandleInterval.ONE_HOUR));
+                List.of(CandleInterval.ONE_HOUR, CandleInterval.FOUR_HOUR));
     }
 
     @Bean
@@ -446,9 +502,10 @@ public class ApplicationConfig {
                                            StrategyConfigRepository configRepo,
                                            KillSwitch killSwitch, OrderManager orderManager,
                                            ExecutionProperties props, StreamManager streamManager,
-                                           IndicatorSnapshotService snapshotService) {
+                                           IndicatorSnapshotService snapshotService,
+                                           AoDivergenceProperties aoDivProperties) {
         return args -> {
-            seedStrategies(configRepo);
+            seedStrategies(configRepo, aoDivProperties);
             registry.reload();
             recovery.recover();
             // Wire the kill-switch side-effects now that OrderManager exists.
@@ -466,7 +523,7 @@ public class ApplicationConfig {
         };
     }
 
-    private void seedStrategies(StrategyConfigRepository repo) {
+    private void seedStrategies(StrategyConfigRepository repo, AoDivergenceProperties aoDiv) {
         repo.upsert(StrategyConfig.builder().id(SmaCrossStrategy.ID).enabled(true)
                 .params(Map.of("fast", "20", "slow", "100")).orderType(OrderType.LIMIT)
                 .maxPositionPct(new BigDecimal("0.10")).interval(CandleInterval.ONE_DAY).version(1).build());
@@ -479,6 +536,13 @@ public class ApplicationConfig {
                 .params(Map.of("fast", "5", "slow", "34", "entanglementAtrThreshold", "0.5",
                         "stopLookback", "5", "allowShort", "true", "atrPeriod", "14"))
                 .orderType(OrderType.LIMIT).maxPositionPct(new BigDecimal("0.10"))
+                .interval(CandleInterval.ONE_HOUR).version(1).build());
+        // Registered for backtests but off for live trading until validated by walk-forward.
+        repo.upsert(StrategyConfig.builder().id(AoDivergenceReversalStrategy.ID)
+                .enabled(aoDiv.isEnabled())
+                .params(Map.of("fast", "5", "slow", "34", "stopBufferAtr", "0.3",
+                        "thresholdAtrPerBar", "0.05", "allowShort", "true", "atrPeriod", "14"))
+                .orderType(OrderType.MARKET).maxPositionPct(new BigDecimal("0.02"))
                 .interval(CandleInterval.ONE_HOUR).version(1).build());
     }
 }

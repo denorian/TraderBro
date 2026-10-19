@@ -20,4 +20,7 @@ public interface BarStore {
 
     /** True if a bar with this key already exists (used for incremental loads). */
     boolean exists(String figi, CandleInterval interval, Instant ts);
+
+    /** Latest bar timestamp for a figi+interval, or empty if none are stored. */
+    java.util.Optional<Instant> latestTs(String figi, CandleInterval interval);
 }

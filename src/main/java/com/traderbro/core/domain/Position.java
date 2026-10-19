@@ -17,4 +17,7 @@ public class Position {
     BigDecimal currentPrice;
     /** Quantity in shares (lots * lotSize), useful for reconciliation. */
     long shares;
+    /** Human-readable instrument identifiers for display; null when unresolvable. */
+    String ticker;
+    String name;
 }

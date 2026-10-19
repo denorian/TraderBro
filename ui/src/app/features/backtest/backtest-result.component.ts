@@ -7,8 +7,9 @@ import { TuiBadge } from '@taiga-ui/kit';
 import { createChart, IChartApi, LineSeries, UTCTimestamp } from 'lightweight-charts';
 import { firstValueFrom, switchMap, timer } from 'rxjs';
 import { ApiService } from '../../core/api.service';
-import { BacktestRunSummary, CompareRowDto, PairResultDto } from '../../core/models';
+import { BacktestRunSummary, CompareRowDto, InstrumentDto, PairResultDto } from '../../core/models';
 import { strategyColor as sc } from '../../shared/strategy-colors';
+import { instrumentLabel as il, instrumentMap } from '../../shared/instrument-label';
 import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
 
 @Component({
@@ -21,6 +22,7 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
       <header class="head">
         <a tuiButton appearance="flat" size="s" routerLink="/backtest">← Список</a>
         <h2>Бэктест {{ runId() }}</h2>
+        <tui-badge appearance="neutral">{{ intervalLabel(run()?.request?.interval ?? '') }}</tui-badge>
         <tui-badge [appearance]="badge(run()?.status ?? '')">{{ run()?.status ?? '' }}</tui-badge>
       </header>
 
@@ -35,7 +37,7 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
             @for (p of results(); track p.strategyId + p.figi; let i = $index) {
               <tr [class.selected]="i === selected()" (click)="select(i)">
                 <td><span [style.color]="strategyColor(p.strategyId)">{{ p.strategyId }}</span></td>
-                <td>{{ p.figi }}</td>
+                <td>{{ instrumentLabel(p.figi, instrMap()) }}</td>
                 <td>{{ pct(p.metrics.cagr) }}</td>
                 <td>{{ p.metrics.sharpe.toFixed(2) }}</td>
                 <td>{{ pct(p.metrics.maxDrawdown) }}</td>
@@ -53,7 +55,7 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
       @if (selectedPair()) {
         <section class="detail">
           <div class="detail-head">
-            <h3>Equity — {{ selectedPair()!.strategyId }} × {{ selectedPair()!.figi }}</h3>
+            <h3>Equity — {{ selectedPair()!.strategyId }} × {{ instrumentLabel(selectedPair()!.figi, instrMap()) }}</h3>
             <button tuiButton appearance="primary" size="s"
               (click)="openOnChart(selectedPair()!)">Показать на графике</button>
           </div>
@@ -89,7 +91,7 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
                 <tr>
                   <td>{{ r.runId.slice(0, 8) }}</td>
                   <td>{{ r.strategyId }}</td>
-                  <td>{{ r.figi }}</td>
+                  <td>{{ instrumentLabel(r.figi, instrMap()) }}</td>
                   <td>{{ pct(r.metrics.cagr) }}</td>
                   <td>{{ r.metrics.sharpe.toFixed(2) }}</td>
                   <td>{{ pct(r.metrics.maxDrawdown) }}</td>
@@ -128,6 +130,7 @@ export class BacktestResultComponent implements OnInit, AfterViewInit {
   readonly runId = signal('');
   readonly run = signal<BacktestRunSummary | null>(null);
   readonly results = signal<PairResultDto[]>([]);
+  readonly instruments = signal<InstrumentDto[]>([]);
   readonly candidates = signal<BacktestRunSummary[]>([]);
   readonly picked = signal<string[]>([]);
   readonly compareRows = signal<CompareRowDto[]>([]);
@@ -135,8 +138,14 @@ export class BacktestResultComponent implements OnInit, AfterViewInit {
 
   /** Exposed to the template for per-strategy pin colours. */
   readonly strategyColor = sc;
+  /** Exposed to the template for figi → "TICKER — Name" labels. */
+  readonly instrumentLabel = il;
 
   private chart: IChartApi | null = null;
+
+  instrMap(): Map<string, InstrumentDto> {
+    return instrumentMap(this.instruments());
+  }
 
   readonly selectedPair = () =>
     this.results()[this.selected()] ?? null;
@@ -154,6 +163,9 @@ export class BacktestResultComponent implements OnInit, AfterViewInit {
     });
     this.api.listBacktests({ limit: 50 }).pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((runs) => this.candidates.set(runs.filter((r) => r.id !== id)));
+    void firstValueFrom(this.api.instruments())
+      .then((list) => this.instruments.set(list))
+      .catch(() => undefined);
   }
 
   ngAfterViewInit(): void {
@@ -178,7 +190,12 @@ export class BacktestResultComponent implements OnInit, AfterViewInit {
       // keep FIGI as fallback
     }
     await this.router.navigate(['/chart', ticker], {
-      queryParams: { backtestRun: this.runId(), strategy: p.strategyId, figi: p.figi }
+      queryParams: {
+        backtestRun: this.runId(),
+        strategy: p.strategyId,
+        interval: this.run()?.request?.interval ?? '',
+        from: this.run()?.request?.from ?? ''
+      }
     });
   }
 
@@ -202,6 +219,17 @@ export class BacktestResultComponent implements OnInit, AfterViewInit {
   badge(status: string): string {
     return status === 'COMPLETED' ? 'success' : status === 'FAILED' ? 'error'
       : status === 'RUNNING' ? 'info' : 'neutral';
+  }
+
+  /** Human-readable timeframe label for a request interval. */
+  intervalLabel(interval: string): string {
+    switch (interval) {
+      case 'FIFTEEN_MIN': return '15м';
+      case 'ONE_HOUR': return '1ч';
+      case 'FOUR_HOUR': return '4ч';
+      case 'ONE_DAY': return '1д';
+      default: return interval || '—';
+    }
   }
 
   pct(v: number): string {

@@ -20,6 +20,8 @@ import ru.tinkoff.piapi.contract.v1.Share;
 import ru.tinkoff.piapi.core.InvestApi;
 import ru.tinkoff.piapi.core.models.Money;
 import ru.tinkoff.piapi.core.models.Portfolio;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * {@link BrokerGateway} backed by the T-Bank Invest API (java-sdk-core 1.36). In sandbox mode
@@ -34,6 +36,11 @@ public class TBankBrokerGateway implements BrokerGateway {
     private final String configuredAccountId;
     private final int moneyScale;
     private volatile String resolvedAccountId;
+
+    /** figi → {ticker, name} for instrument names on positions; instruments are immutable so a
+     * tiny in-memory cache avoids a T-Bank lookup per poll. Unresolvable figis are not cached
+     * (absent key) so a later successful lookup is still possible. */
+    private final Map<String, String[]> instrumentNames = new ConcurrentHashMap<>();
 
     public TBankBrokerGateway(InvestApi api, boolean sandbox, String accountId, int moneyScale) {
         this.api = api;
@@ -105,9 +112,39 @@ public class TBankBrokerGateway implements BrokerGateway {
                     .shares(shares)
                     .averagePrice(money(p.getAveragePositionPrice()))
                     .currentPrice(money(p.getCurrentPrice()))
+                    .ticker(tickerOf(p.getFigi()))
+                    .name(nameOf(p.getFigi()))
                     .build());
         }
         return out;
+    }
+
+    /** Returns the resolved {ticker, name} pair for a figi (cached), or null components if the
+     * instrument cannot be resolved (e.g. money/currency positions). */
+    private String[] names(String figi) {
+        String[] cached = instrumentNames.get(figi);
+        if (cached != null) {
+            return cached;
+        }
+        try {
+            var sec = api.getInstrumentsService().getInstrumentByFigiSync(figi);
+            String[] names = { sec.getTicker(), sec.getName() };
+            instrumentNames.put(figi, names);
+            return names;
+        } catch (Exception e) {
+            log.debug("cannot resolve instrument name for figi {}: {}", figi, e.getMessage());
+            return null;
+        }
+    }
+
+    private String tickerOf(String figi) {
+        String[] names = names(figi);
+        return names == null ? null : names[0];
+    }
+
+    private String nameOf(String figi) {
+        String[] names = names(figi);
+        return names == null ? null : names[1];
     }
 
     @Override

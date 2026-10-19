@@ -5,8 +5,9 @@ import { TuiButton } from '@taiga-ui/core';
 import { TuiBadge } from '@taiga-ui/kit';
 import { switchMap, timer } from 'rxjs';
 import { ApiService } from '../../core/api.service';
-import { BacktestRunSummary } from '../../core/models';
+import { BacktestRunSummary, InstrumentDto } from '../../core/models';
 import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
+import { instrumentLabel as il, instrumentMap } from '../../shared/instrument-label';
 
 @Component({
   selector: 'app-backtest-list',
@@ -28,7 +29,7 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
               <span class="muted">{{ run.createdAt | mskTime }}</span>
             </div>
             <div class="row">Стратегии: <span>{{ run.request.strategyIds.join(', ') }}</span></div>
-            <div class="row">Инструменты: <span>{{ run.request.figis.join(', ') }}</span></div>
+            <div class="row">Инструменты: <span>{{ figiLabels(run.request.figis) }}</span></div>
             <div class="row">Период: <span>{{ fmtDate(run.request.from) }} → {{ fmtDate(run.request.to) }}
               ({{ run.request.interval }})</span></div>
             @if (run.status === 'RUNNING') {
@@ -79,12 +80,25 @@ export class BacktestListComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly runs = signal<BacktestRunSummary[]>([]);
+  readonly instruments = signal<InstrumentDto[]>([]);
+
+  readonly instrumentLabel = il;
+
+  instrMap(): Map<string, InstrumentDto> {
+    return instrumentMap(this.instruments());
+  }
+
+  /** Comma-joined human-readable labels for a list of figis. */
+  figiLabels(figis: string[]): string {
+    return figis.map((f) => this.instrumentLabel(f, this.instrMap())).join(', ');
+  }
 
   ngOnInit(): void {
     timer(0, 10_000).pipe(
       switchMap(() => this.api.listBacktests()),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe((runs) => this.runs.set(runs));
+    void this.api.instruments().subscribe((list) => this.instruments.set(list));
   }
 
   badge(status: string): string {

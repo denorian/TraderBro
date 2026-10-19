@@ -4,9 +4,11 @@ import { Observable } from 'rxjs';
 import {
   BacktestRunDetail,
   BacktestRunSummary,
+  AngulationEventDto,
   ChartResponse,
   CompareRowDto,
   CreateBacktestResponse,
+  DivergenceEventDto,
   InstrumentDto,
   LatestIndicatorDto,
   PairResultDto,
@@ -28,8 +30,11 @@ export class ApiService {
     return this.http.get<InstrumentDto[]>(`${this.base}/instruments`);
   }
 
-  chart(figi: string, interval = '1h', limit = 500): Observable<ChartResponse> {
-    const params = new HttpParams().set('interval', interval).set('limit', String(limit));
+  chart(figi: string, interval = '1h', limit = 500,
+        opts?: { from?: string; to?: string }): Observable<ChartResponse> {
+    let params = new HttpParams().set('interval', interval).set('limit', String(limit));
+    if (opts?.from) { params = params.set('from', opts.from); }
+    if (opts?.to) { params = params.set('to', opts.to); }
     return this.http.get<ChartResponse>(`${this.base}/chart/${figi}`, { params });
   }
 
@@ -97,5 +102,29 @@ export class ApiService {
     return this.http.get<CompareRowDto[]>(`${this.base}/backtests/compare`, {
       params: new HttpParams().set('ids', ids.join(','))
     });
+  }
+
+  // ---------------------------------------------------------------- Williams events
+  divergences(opts?: { figi?: string; interval?: string; status?: string; limit?: number })
+    : Observable<DivergenceEventDto[]> {
+    let p = new HttpParams().set('limit', String(opts?.limit ?? 100));
+    if (opts?.figi) { p = p.set('figi', opts.figi); }
+    if (opts?.interval) { p = p.set('interval', opts.interval); }
+    if (opts?.status) { p = p.set('status', opts.status); }
+    return this.http.get<DivergenceEventDto[]>(`${this.base}/divergences`, { params: p });
+  }
+
+  latestDivergences(interval = '1h'): Observable<DivergenceEventDto[]> {
+    return this.http.get<DivergenceEventDto[]>(`${this.base}/divergences/latest`, {
+      params: new HttpParams().set('interval', interval)
+    });
+  }
+
+  angulation(opts?: { figi?: string; interval?: string; limit?: number })
+    : Observable<AngulationEventDto[]> {
+    let p = new HttpParams().set('limit', String(opts?.limit ?? 100));
+    if (opts?.figi) { p = p.set('figi', opts.figi); }
+    if (opts?.interval) { p = p.set('interval', opts.interval); }
+    return this.http.get<AngulationEventDto[]>(`${this.base}/angulation`, { params: p });
   }
 }

@@ -21,6 +21,6 @@ public record BacktestRequest(
         BacktestCosts costs,
         Map<String, Object> strategyParamsOverrides,
         boolean walkForward,
-        int walkForwardTrainDays,
-        int walkForwardTestDays) {
+        Integer walkForwardTrainDays,
+        Integer walkForwardTestDays) {
 }

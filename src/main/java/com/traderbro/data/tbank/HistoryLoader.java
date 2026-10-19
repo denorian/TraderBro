@@ -62,10 +62,19 @@ public class HistoryLoader implements CommandLineRunner {
 
     private void loadRange(Instrument inst, Instant from, Instant to, CandleInterval interval) {
         try {
-            List<Bar> bars = marketData.getHistory(inst.getFigi(), from, to, interval);
+            // Incremental: only fetch bars newer than the latest already stored, so repeated
+            // startups don't re-download the whole window (and burn the per-minute API quota).
+            Instant start = barStore.latestTs(inst.getFigi(), interval)
+                    .map(latest -> latest.isAfter(from) ? latest : from)
+                    .orElse(from);
+            if (start.compareTo(to) >= 0) {
+                log.debug("Skipping {} {}: up to date at {}", inst.getTicker(), interval, start);
+                return;
+            }
+            List<Bar> bars = marketData.getHistory(inst.getFigi(), start, to, interval);
             barStore.upsert(bars);
             log.info("Backfilled {} bars for {} interval {} ({}..{})",
-                    bars.size(), inst.getTicker(), interval, from, to);
+                    bars.size(), inst.getTicker(), interval, start, to);
         } catch (RuntimeException e) {
             log.error("Backfill failed for {} interval {}: {}", inst.getTicker(), interval, e.getMessage());
         }

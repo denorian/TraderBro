@@ -3,8 +3,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  EventEmitter,
   Input,
   OnDestroy,
+  Output,
   ViewChild
 } from '@angular/core';
 import {
@@ -19,13 +21,9 @@ import {
   Time,
   UTCTimestamp
 } from 'lightweight-charts';
-import { ChartResponse, SignalRecordDto } from '../../core/models';
+import { ChartResponse, DivergenceEventDto, SignalRecordDto } from '../../core/models';
 import { strategyColor } from '../../shared/strategy-colors';
 
-/**
- * Angular wrapper around lightweight-charts v5: candlesticks + the three Alligator lines and
- * an Awesome Oscillator histogram pane, with visible-range synchronisation.
- */
 @Component({
   selector: 'app-candlestick-chart',
   standalone: true,
@@ -65,17 +63,58 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
     return this._data;
   }
 
-  /** ENTRY/EXIT signal points to pin on the candles (live or backtest). */
-  @Input() signals: SignalRecordDto[] = [];
-  /** Only render signals for these strategy ids (empty = all). */
-  @Input() selectedStrategies: string[] = [];
-  /** Render rejected/filtered signals semi-transparently. */
-  @Input() showRejected = false;
+  @Input() set signals(v: SignalRecordDto[]) {
+    this._signals = v;
+    this.rerender();
+  }
+  get signals(): SignalRecordDto[] {
+    return this._signals;
+  }
+  @Input() set selectedStrategies(v: string[]) {
+    this._selectedStrategies = v;
+    this.rerender();
+  }
+  get selectedStrategies(): string[] {
+    return this._selectedStrategies;
+  }
+  @Input() set showRejected(v: boolean) {
+    this._showRejected = v;
+    this.rerender();
+  }
+  get showRejected(): boolean {
+    return this._showRejected;
+  }
+  @Input() set divergences(v: DivergenceEventDto[]) {
+    this._divergences = v;
+    this.rerender();
+  }
+  get divergences(): DivergenceEventDto[] {
+    return this._divergences;
+  }
+  @Input() set showDivergences(v: boolean) {
+    this._showDivergences = v;
+    this.rerender();
+  }
+  get showDivergences(): boolean {
+    return this._showDivergences;
+  }
+
+  @Output() loadOlder = new EventEmitter<void>();
+  @Output() divergenceClick = new EventEmitter<DivergenceEventDto>();
 
   private _data: ChartResponse | null = null;
+  private _signals: SignalRecordDto[] = [];
+  private _selectedStrategies: string[] = [];
+  private _showRejected = false;
+  private _divergences: DivergenceEventDto[] = [];
+  private _showDivergences = true;
   private chart: IChartApi | null = null;
   private aoChart: IChartApi | null = null;
   private lastFitFigi: string | null = null;
+  /** Epoch (sec) of the earliest bar the chart was last fitted to; used to detect when
+   *  newly arriving data extends history further left and warrants a fresh fitContent. */
+  private lastFitFrom = Infinity;
+  private lastBarIndex = -1;
   private readonly mainSeries: ISeriesApi<any>[] = [];
   private readonly aoSeries: ISeriesApi<any>[] = [];
 
@@ -94,15 +133,41 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
       timeScale: { visible: false }
     });
     this.syncTimeScales();
+    this.watchEdges();
     if (this._data) {
       this.render(this._data);
     }
   }
 
-  /**
-   * Keeps the horizontal (time) range of both panes in lock-step — zooming/panning on either
-   * chart moves the other. Vertical scales stay independent (price vs AO units differ).
-   */
+  private rerender(): void {
+    if (this.chart && this.aoChart && this._data) {
+      this.render(this._data);
+    }
+  }
+
+  private watchEdges(): void {
+    if (!this.chart) {
+      return;
+    }
+    let prevFrom = -1;
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (!range) {
+        return;
+      }
+      if (this.lastBarIndex >= 0 && range.to > this.lastBarIndex) {
+        this.chart!.timeScale().setVisibleLogicalRange({
+          from: range.from,
+          to: this.lastBarIndex
+        });
+      }
+      const from = range.from;
+      if (prevFrom >= 0 && from <= 1 && from < prevFrom) {
+        this.loadOlder.emit();
+      }
+      prevFrom = from;
+    });
+  }
+
   private syncTimeScales(): void {
     let syncing = false;
     const link = (source: IChartApi, target: IChartApi) => {
@@ -124,6 +189,8 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
     if (!this.chart || !this.aoChart || !data) {
       return;
     }
+    this.lastBarIndex = data.bars.length - 1;
+    const prevRange = this.chart.timeScale().getVisibleRange();
     for (const s of this.mainSeries) {
       this.chart.removeSeries(s);
     }
@@ -163,20 +230,29 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
     this.mainSeries.push(candle, jaw, teeth, lips);
     this.aoSeries.push(hist);
 
-    this.applyMarkers(candle, data.figi);
+    const markers = [...this.applyMarkers(candle, data.figi), ...this.divergenceMarkers(data.figi)];
+    if (markers.length) {
+      createSeriesMarkers(candle, markers);
+    }
+    this.applyAoLine(data.figi);
 
-    // Fit the full loaded range when the instrument changes (on a wide screen lightweight-charts
-    // would otherwise show only the trailing bars, cutting off the left side). Keep the user's
-    // zoom/pan across subsequent polls of the same instrument.
-    if (data.figi !== this.lastFitFigi) {
+    // Refit whenever a new instrument appears OR the incoming data reaches further back than
+    // what we last fitted to (e.g. the first poll returns a truncated live window and a later
+    // backtest poll delivers the full period). Otherwise preserve the current viewport.
+    const firstEpoch = data.bars.length ? (toTime(data.bars[0].ts) as number) : 0;
+    const historyExpanded = firstEpoch > 0 && firstEpoch < this.lastFitFrom - 60;
+    if (data.figi !== this.lastFitFigi || historyExpanded) {
       this.lastFitFigi = data.figi;
+      this.lastFitFrom = firstEpoch;
       this.chart.timeScale().fitContent();
       this.aoChart.timeScale().fitContent();
+    } else if (prevRange) {
+      this.chart.timeScale().setVisibleRange(prevRange);
+      this.aoChart.timeScale().setVisibleRange(prevRange);
     }
   }
 
-  /** Renders ENTRY/EXIT pins on the candle series, filtered by selected strategies. */
-  private applyMarkers(candle: ISeriesApi<any>, figi: string): void {
+  private applyMarkers(candle: ISeriesApi<any>, figi: string): SeriesMarker<Time>[] {
     const markers: SeriesMarker<Time>[] = [];
     for (const s of this.signals) {
       if (s.figi && s.figi !== figi) {
@@ -201,16 +277,58 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
         position,
         color,
         shape,
-        text: s.strategyId.replace('Strategy', '')
+        text: s.type === 'ENTRY' ? 'Buy' : 'Sell'
       });
     }
     if (markers.length > 500) {
-      // TODO(stage 4): aggregate/paginate markers by the visible range to keep the chart fast.
       console.warn(`[chart] ${markers.length} markers exceed the 500 sanity cap; trimming.`);
       markers.length = 500;
     }
-    if (markers.length) {
-      createSeriesMarkers(candle, markers);
+    return markers;
+  }
+
+  private divergenceMarkers(figi: string): SeriesMarker<Time>[] {
+    if (!this.showDivergences) {
+      return [];
+    }
+    const markers: SeriesMarker<Time>[] = [];
+    for (const d of this.divergences) {
+      if (d.figi && d.figi !== figi) {
+        continue;
+      }
+      const bull = d.direction === 'BULLISH';
+      const color = d.status === 'EXPIRED' ? '#8a8f9e' : bull ? '#3dd68c' : '#ff5c5c';
+      markers.push({
+        time: toTime(d.ts),
+        position: bull ? ('belowBar' as const) : ('aboveBar' as const),
+        color: d.status === 'UNCONFIRMED' ? color + '66' : color,
+        shape: 'circle' as const,
+        text: '◆'
+      });
+    }
+    return markers;
+  }
+
+  private applyAoLine(figi: string): void {
+    if (!this.showDivergences || !this.aoChart) {
+      return;
+    }
+    const points: { time: Time; value: number }[] = [];
+    for (const d of this.divergences) {
+      if (d.figi && d.figi !== figi) {
+        continue;
+      }
+      points.push({ time: toTime(d.aoPeak1Ts), value: d.aoPeak1Value });
+      points.push({ time: toTime(d.aoPeak2Ts), value: d.aoPeak2Value });
+    }
+    if (points.length) {
+      const line = this.aoChart.addSeries(LineSeries, {
+        color: '#ffd23f',
+        lineWidth: 1,
+        lineStyle: 2
+      });
+      line.setData(points);
+      this.aoSeries.push(line);
     }
   }
 
@@ -220,7 +338,6 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
   }
 }
 
-/** Appends an 8-digit alpha channel to a #RRGGBB colour. */
 function alpha(hex: string, a: string): string {
   return hex + a;
 }

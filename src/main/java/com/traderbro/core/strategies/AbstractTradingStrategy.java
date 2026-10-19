@@ -83,6 +83,22 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
         return round(series.getLastBar().getClosePrice().doubleValue());
     }
 
+    /** Builds a {@link SignalVerdict#FILTERED} signal with a reason (e.g. {@code NO_ANGULATION}). */
+    protected Signal filteredSignal(BarSeries series, Direction direction, String reason) {
+        return Signal.builder()
+                .id(UUID.randomUUID())
+                .createdAt(Instant.now())
+                .strategyId(id())
+                .figi(series.getName())
+                .ts(SeriesFactory.lastEndTime(series))
+                .price(lastPrice(series))
+                .direction(direction)
+                .indicatorSnapshot(Map.of())
+                .verdict(SignalVerdict.FILTERED)
+                .reason(reason)
+                .build();
+    }
+
     /** Rounds a raw price to the configured money scale. */
     protected BigDecimal round(double v) {
         return BigDecimal.valueOf(v).setScale(moneyScale, RoundingMode.HALF_UP);

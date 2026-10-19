@@ -6,10 +6,11 @@ import { TuiBadge } from '@taiga-ui/kit';
 import { TuiTable, TuiTableTbody, TuiTableTd, TuiTableTh, TuiTableThead, TuiTableTr } from '@taiga-ui/addon-table';
 import { firstValueFrom, forkJoin, switchMap, timer } from 'rxjs';
 import { ApiService } from '../../core/api.service';
-import { InstrumentDto, LatestIndicatorDto, SignalDto, StatusResponse } from '../../core/models';
+import { DivergenceEventDto, InstrumentDto, LatestIndicatorDto, PositionDto, SignalDto, StatusResponse } from '../../core/models';
 import { PricePipe } from '../../shared/pipes/price.pipe';
 import { MoneyRubPipe } from '../../shared/pipes/money-rub.pipe';
 import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
+import { instrumentLabel as il, instrumentMap } from '../../shared/instrument-label';
 
 @Component({
   selector: 'app-dashboard',
@@ -66,16 +67,21 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
       <table tuiTable [columns]="columns" class="inst">
         <thead tuiThead>
           <tr>
-            <th tuiTh>Тикер</th>
+            <th tuiTh>Инструмент</th>
             <th tuiTh>Тип</th>
             <th tuiTh>AO</th>
             <th tuiTh>Фаза</th>
+            <th tuiTh>Дивергенция AO</th>
+            <th tuiTh>Ангуляция</th>
           </tr>
         </thead>
         <tbody tuiTbody>
           @for (row of filtered(); track row.figi) {
             <tr tuiTr class="tp-table-row" (click)="openChart(row.ticker)">
-              <td tuiTd><strong>{{ row.ticker }}</strong></td>
+              <td tuiTd>
+                <strong>{{ row.ticker }}</strong>
+                <div class="inst-name">{{ row.name }}</div>
+              </td>
               <td tuiTd><tui-badge appearance="neutral">{{ row.type === 'FUTURE' ? 'фьючерс' : 'акция' }}</tui-badge></td>
               <td tuiTd>
                 <span [class.tp-profit]="(row.ao ?? 0) > 0" [class.tp-loss]="(row.ao ?? 0) < 0">
@@ -83,9 +89,27 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
                 </span>
               </td>
               <td tuiTd><tui-badge [appearance]="stateAppearance(row.state)">{{ row.state }}</tui-badge></td>
+              <td tuiTd>
+                @if (row.divergence) {
+                  <tui-badge [appearance]="divergenceAppearance(row.divergence)">
+                    {{ divergenceLabel(row.divergence) }}
+                  </tui-badge>
+                } @else {
+                  <span class="muted">—</span>
+                }
+              </td>
+              <td tuiTd>
+                @if (row.angulationAtr != null) {
+                  <tui-badge [appearance]="row.angulationAtr >= 0.1 ? 'success' : 'neutral'">
+                    {{ row.angulationAtr.toFixed(2) }} {{ angDir(row.angulationDir) }}
+                  </tui-badge>
+                } @else {
+                  <span class="muted">—</span>
+                }
+              </td>
             </tr>
           } @empty {
-            <tr tuiTr><td tuiTd colspan="4">Нет инструментов</td></tr>
+            <tr tuiTr><td tuiTd colspan="6">Нет инструментов</td></tr>
           }
         </tbody>
       </table>
@@ -95,7 +119,7 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
           <h3>Позиции</h3>
           <ul>
             @for (p of status()?.positions ?? []; track p.figi) {
-              <li>{{ p.figi }} — {{ p.quantity }} лот</li>
+              <li>{{ positionLabel(p) }} — {{ p.lots }} лот</li>
             } @empty {
               <li>Нет открытых позиций</li>
             }
@@ -109,7 +133,7 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
                 <tui-badge [appearance]="s.verdict === 'ACCEPTED' ? 'success' : 'warning'">
                   {{ s.direction }}
                 </tui-badge>
-                {{ s.strategyId }} {{ s.figi }} · {{ s.price | price }} ({{ s.ts | mskTime }})
+                {{ s.strategyId }} {{ instrumentLabel(s.figi, instrMap()) }} · {{ s.price | price }} ({{ s.ts | mskTime }})
               </li>
             } @empty {
               <li>Сигналов нет</li>
@@ -127,9 +151,11 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
     .updated { color: var(--tui-text-secondary); font-size: .8rem; }
     .filter { padding: 0 1rem 1rem; display: flex; gap: .5rem; align-items: center; }
     .notice { margin: 0 1rem 1rem; }
+    .inst-name { color: var(--tui-text-secondary); font-size: .78rem; font-weight: 400; }
     .tables { display: grid; grid-template-columns: 1fr 340px; gap: 1rem; padding: 0 1rem; }
     .side { display: flex; flex-direction: column; gap: 1rem; }
     .side ul { list-style: none; margin: 0; padding: 0; }
+    .muted { color: var(--tui-text-secondary); }
     @media (max-width: 1280px) { .tables { grid-template-columns: 1fr; } .tables table { display: block; overflow-x: auto; } }
   `]
 })
@@ -138,18 +164,35 @@ export class DashboardComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
-  readonly columns = ['ticker', 'type', 'ao', 'state'];
+  readonly columns = ['ticker', 'type', 'ao', 'state', 'divergence', 'angulation'];
   readonly typeFilter = signal('');
   readonly status = signal<StatusResponse | null>(null);
   readonly instruments = signal<InstrumentDto[]>([]);
   readonly latest = signal<LatestIndicatorDto[]>([]);
   readonly signals = signal<SignalDto[]>([]);
+  readonly divergences = signal<DivergenceEventDto[]>([]);
   readonly error = signal(false);
   readonly lastUpdated = signal<string>(new Date().toISOString());
   readonly filtered = signal<Row[]>([]);
 
   pnl(): number | null {
     return this.status()?.portfolio?.dayPnl ?? null;
+  }
+
+  /** Exposed for templates; maps a figi to "TICKER — Name". */
+  readonly instrumentLabel = il;
+
+  instrMap(): Map<string, InstrumentDto> {
+    return instrumentMap(this.instruments());
+  }
+
+  /** Label for a position: prefers the broker-provided ticker/name, else the tracked catalog,
+   * else the raw figi. */
+  positionLabel(p: PositionDto): string {
+    if (p.ticker && p.name) {
+      return `${p.ticker} — ${p.name}`;
+    }
+    return this.instrumentLabel(p.figi, this.instrMap());
   }
 
   ngOnInit(): void {
@@ -161,16 +204,18 @@ export class DashboardComponent implements OnInit {
 
   async reload(): Promise<void> {
     try {
-      const [status, instruments, latest, signals] = await firstValueFrom(forkJoin([
+      const [status, instruments, latest, signals, divergences] = await firstValueFrom(forkJoin([
         this.api.status(),
         this.api.instruments(),
         this.api.latestIndicators('1h'),
-        this.api.signals(20)
+        this.api.signals(20),
+        this.api.latestDivergences('1h')
       ]));
       this.status.set(status);
       this.instruments.set(instruments);
       this.latest.set(latest);
       this.signals.set(signals);
+      this.divergences.set(divergences);
       this.error.set(false);
       this.lastUpdated.set(new Date().toISOString());
       this.buildRows();
@@ -186,6 +231,7 @@ export class DashboardComponent implements OnInit {
 
   private buildRows(): void {
     const byFigi = new Map(this.latest().map((l) => [l.figi, l]));
+    const divByFigi = new Map(this.divergences().map((d) => [d.figi, d]));
     const rows = this.instruments().map((inst) => {
       const snap = byFigi.get(inst.figi);
       const all = (snap?.alligator ?? {}) as Record<string, unknown>;
@@ -193,13 +239,32 @@ export class DashboardComponent implements OnInit {
       return {
         figi: inst.figi,
         ticker: inst.ticker,
+        name: inst.name,
         type: inst.type,
         ao: typeof ao['ao'] === 'number' ? ao['ao'] : null,
-        state: String(all['state'] ?? 'SLEEPING')
+        state: String(all['state'] ?? 'SLEEPING'),
+        divergence: divByFigi.get(inst.figi) ?? null,
+        angulationAtr: snap?.angulationAngleAtr ?? null,
+        angulationDir: snap?.angulationDirection ?? null
       };
     });
     const tf = this.typeFilter();
     this.filtered.set(rows.filter((r) => !tf || r.type === tf));
+  }
+
+  divergenceLabel(d: DivergenceEventDto): string {
+    const dir = d.direction === 'BEARISH' ? 'МЕДВЕЖЬЯ' : 'БЫЧЬЯ';
+    return `${dir} · ${d.degree === 2 ? 'двойная' : 'одинарная'} · ${d.status}`;
+  }
+
+  divergenceAppearance(d: DivergenceEventDto): string {
+    if (d.status === 'EXPIRED') { return 'neutral'; }
+    if (d.status === 'UNCONFIRMED') { return 'warning'; }
+    return d.direction === 'BEARISH' ? 'error' : 'success';
+  }
+
+  angDir(dir: string | null): string {
+    return dir === 'AWAY_UP' ? '↑' : dir === 'AWAY_DOWN' ? '↓' : '';
   }
 
   stateAppearance(state: string): string {
@@ -219,7 +284,11 @@ export class DashboardComponent implements OnInit {
 interface Row {
   figi: string;
   ticker: string;
+  name: string;
   type: string;
   ao: number | null;
   state: string;
+  divergence: DivergenceEventDto | null;
+  angulationAtr: number | null;
+  angulationDir: string | null;
 }

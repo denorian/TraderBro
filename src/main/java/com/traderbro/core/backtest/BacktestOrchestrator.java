@@ -151,7 +151,7 @@ public class BacktestOrchestrator {
                 request.from(), request.to());
         BarSeries series = SeriesFactory.fromDomain(bars, DecimalNum::valueOf, bars.size() + 10,
                 pair.figi());
-        BacktestCosts costs = request.costs() == null ? defaultCosts() : request.costs();
+        BacktestCosts costs = resolveCosts(request.costs());
 
         PairResult result;
         if (request.walkForward()) {
@@ -203,9 +203,13 @@ public class BacktestOrchestrator {
     private PairResult runWalkForward(TradingStrategy strategy, BarSeries series,
                                       Instrument instrument, Map<String, String> params,
                                       BacktestCosts costs, BacktestRequest request) {
+        int trainDays = request.walkForwardTrainDays() != null
+                ? request.walkForwardTrainDays() : props.getWalkForward().getTrainDays();
+        int testDays = request.walkForwardTestDays() != null
+                ? request.walkForwardTestDays() : props.getWalkForward().getTestDays();
         List<Map<String, String>> grid = List.of(params);
         WalkForwardResult wf = walkForwardRunner.run(strategy, series, instrument,
-                request.walkForwardTrainDays(), request.walkForwardTestDays(), grid,
+                trainDays, testDays, grid,
                 WalkForwardRunner.Objective.SHARPE, costs.commissionPct(),
                 BigDecimal.valueOf(costs.slippageBps()), costs.initialCapital(),
                 costs.maxPositionPct());
@@ -238,6 +242,20 @@ public class BacktestOrchestrator {
                 props.getDefaultCommissionPct().movePointLeft(2), // percent → fraction
                 props.getDefaultSlippageBps(), new BigDecimal("1000000"),
                 new BigDecimal("0.95"));
+    }
+
+    /** Merges the request costs with config defaults, so partial requests (e.g. UI sends only
+     * commission/slippage) still get sane capital and position limits. */
+    private BacktestCosts resolveCosts(BacktestCosts c) {
+        if (c == null) {
+            return defaultCosts();
+        }
+        BacktestCosts d = defaultCosts();
+        return new BacktestCosts(
+                c.commissionPct() != null ? c.commissionPct() : d.commissionPct(),
+                c.slippageBps(),
+                c.initialCapital() != null ? c.initialCapital() : d.initialCapital(),
+                c.maxPositionPct() != null ? c.maxPositionPct() : d.maxPositionPct());
     }
 
     private List<PairSpec> pairSpecs(BacktestRequest request) {

@@ -63,6 +63,41 @@ components:
         ts: { type: string, format: date-time, nullable: true }
         alligator: { type: object, additionalProperties: true }
         ao: { type: object, additionalProperties: true }
+        angulationAngleAtr: { type: number, format: double, nullable: true }
+        angulationDirection: { type: string, nullable: true }
+    DivergenceEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        figi: { type: string }
+        interval: { type: string }
+        ts: { type: string, format: date-time }
+        direction: { type: string, enum: [BULLISH, BEARISH] }
+        degree: { type: integer }
+        aoPeak1Ts: { type: string, format: date-time }
+        aoPeak1Value: { type: number, format: double }
+        aoPeak2Ts: { type: string, format: date-time }
+        aoPeak2Value: { type: number, format: double }
+        priceAtPeak1: { type: number, format: double }
+        priceAtPeak2: { type: number, format: double }
+        strength: { type: number, format: double }
+        status: { type: string, enum: [UNCONFIRMED, CONFIRMED, EXPIRED] }
+        confirmedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    AngulationEvent:
+      type: object
+      properties:
+        figi: { type: string }
+        interval: { type: string }
+        ts: { type: string, format: date-time }
+        divergenceEventId: { type: string, format: uuid }
+        direction: { type: string, enum: [AWAY_UP, AWAY_DOWN] }
+        priceSlopeAtr: { type: number, format: double }
+        jawSlopeAtr: { type: number, format: double }
+        angleAtr: { type: number, format: double }
+        anchorTs: { type: string, format: date-time }
+        barsInWindow: { type: integer }
+        createdAt: { type: string, format: date-time }
     BacktestCosts:
       type: object
       properties:
@@ -219,6 +254,56 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/LatestIndicatorDto' }
+  /api/divergences:
+    get:
+      summary: AO "Twin Peaks" divergence events (filterable, paginated)
+      operationId: listDivergences
+      parameters:
+        - { name: figi, in: query, schema: { type: string } }
+        - { name: interval, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: status, in: query, schema: { type: string, enum: [UNCONFIRMED, CONFIRMED, EXPIRED] } }
+        - { name: limit, in: query, schema: { type: integer, default: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: Divergence events
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DivergenceEvent' }
+  /api/divergences/latest:
+    get:
+      summary: Latest divergence per instrument for a timeframe
+      operationId: latestDivergences
+      parameters:
+        - { name: interval, in: query, schema: { type: string, default: 1h } }
+      responses:
+        '200':
+          description: Latest divergences
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DivergenceEvent' }
+  /api/angulation:
+    get:
+      summary: Angulation events (price departure from the Jaw line)
+      operationId: listAngulation
+      parameters:
+        - { name: figi, in: query, schema: { type: string } }
+        - { name: interval, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 100 } }
+      responses:
+        '200':
+          description: Angulation events
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AngulationEvent' }
   /api/strategies:
     get:
       summary: Available strategies for the backtest form

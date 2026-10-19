@@ -23,7 +23,7 @@ tbank:
   timeout: 10s
 
 instruments:
-  tickers: [SBER, GAZP, LKOH, YDEX, VTBR, T, PLZL, NVTK, ROSN, TATN, GMKN, MOEX, X5]
+  tickers: [SBER, GAZP, LKOH, YDEX, VTBR, TCSG, PLZL, NVTK, ROSN, TATN, GMKN, MOEX, X5, SIBN, TRNFP, SPBE]
 
 risk:
   daily-loss-limit-pct: 0.02
@@ -47,8 +47,29 @@ indicators:
     fast: 5
     slow: 34
   snapshot-retention-days: 90
-  snapshot-timeframes: [FIFTEEN_MIN, ONE_HOUR, ONE_DAY]
+  snapshot-timeframes: [FIFTEEN_MIN, ONE_HOUR, FOUR_HOUR, ONE_DAY]
   recent-catchup-hours: 48
+
+williams:
+  divergence:
+    ao-peak-window: 2
+    min-peak-distance: 5
+    max-peak-distance: 60
+    min-peak-abs-atr: 0.2
+    confirm-bars: 10
+  angulation:
+    lookback-bars: 60
+    threshold-atr-per-bar: 0.05
+    events-lookback-bars: 30
+
+strategies:
+  ao-divergence:
+    enabled: false
+    timeframes: [FIFTEEN_MIN, ONE_HOUR]
+    stop-buffer-atr: 0.3
+    risk-capital-pct: 1
+    allow-short: true
+    atr-period: 14
 
 ui:
   enabled: true

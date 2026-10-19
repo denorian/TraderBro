@@ -36,6 +36,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class UiController {
 
     private static final int DEFAULT_CHART_BARS = 500;
+    /** Upper bound on chart bars per request, guarding against memory blow-ups on huge limits. */
+    private static final int MAX_CHART_BARS = 10_000;
 
     private final InstrumentRepository instruments;
     private final BarStore barStore;
@@ -89,15 +91,16 @@ public class UiController {
                 .map(Instrument::getFigi)
                 .orElseThrow(() -> new IllegalArgumentException("unknown ticker: " + ticker));
         CandleInterval tf = parseInterval(interval);
+        int cap = Math.min(limit, MAX_CHART_BARS);
         Instant end = to != null ? to : Instant.now();
         Instant start = from != null ? from : end.minus(
-                SeriesFactory.toDuration(tf).multipliedBy(Math.max(limit, DEFAULT_CHART_BARS)));
+                SeriesFactory.toDuration(tf).multipliedBy(Math.max(cap, DEFAULT_CHART_BARS)));
 
         List<Bar> bars = barStore.findByFigiAndInterval(figi, tf, start, end);
-        if (bars.size() > limit) {
-            bars = bars.subList(bars.size() - limit, bars.size());
+        if (bars.size() > cap) {
+            bars = bars.subList(bars.size() - cap, bars.size());
         }
-        BarSeries series = SeriesFactory.fromDomain(bars, DoubleNum::valueOf, DEFAULT_CHART_BARS, figi);
+        BarSeries series = SeriesFactory.fromDomain(bars, DoubleNum::valueOf, cap, figi);
         AlligatorIndicator alligator = indicatorFactory.alligator(series);
         AwesomeOscillatorIndicator ao = indicatorFactory.awesomeOscillator(series);
 
@@ -121,10 +124,11 @@ public class UiController {
 
     // ------------------------------------------------------------------ /api/indicators/latest
     public record LatestIndicatorDto(String figi, String interval, Instant ts,
-                                     Map<String, Object> alligator, Map<String, Object> ao) {
+                                     Map<String, Object> alligator, Map<String, Object> ao,
+                                     Double angulationAngleAtr, String angulationDirection) {
     }
 
-    /** Latest Alligator + AO snapshot per instrument for the dashboard summary table. */
+    /** Latest Alligator + AO + angulation snapshot per instrument for the dashboard summary. */
     @GetMapping("/indicators/latest")
     public List<LatestIndicatorDto> latestIndicators(
             @RequestParam(defaultValue = "1h") String interval) {
@@ -134,6 +138,8 @@ public class UiController {
         for (Map.Entry<String, List<IndicatorSnapshot>> e : byFigi.entrySet()) {
             Map<String, Object> alligator = Map.of();
             Map<String, Object> ao = Map.of();
+            Double angleAtr = null;
+            String angDir = null;
             Instant ts = null;
             for (IndicatorSnapshot s : e.getValue()) {
                 if (s.getIndicator() == IndicatorSnapshot.IndicatorKind.ALLIGATOR) {
@@ -141,9 +147,15 @@ public class UiController {
                     ts = s.getTs();
                 } else if (s.getIndicator() == IndicatorSnapshot.IndicatorKind.AO) {
                     ao = s.getValues();
+                } else if (s.getIndicator() == IndicatorSnapshot.IndicatorKind.ANGULATION) {
+                    Object a = s.getValues().get("angle_atr");
+                    Object d = s.getValues().get("direction");
+                    angleAtr = a instanceof Number n ? n.doubleValue() : null;
+                    angDir = d instanceof String str ? str : null;
                 }
             }
-            out.add(new LatestIndicatorDto(e.getKey(), tf.name(), ts, alligator, ao));
+            out.add(new LatestIndicatorDto(e.getKey(), tf.name(), ts, alligator, ao,
+                    angleAtr, angDir));
         }
         out.sort(java.util.Comparator.comparing(LatestIndicatorDto::figi));
         return out;
@@ -157,6 +169,7 @@ public class UiController {
         return switch (v) {
             case "15M", "FIFTEEN_MIN" -> CandleInterval.FIFTEEN_MIN;
             case "1H", "ONE_HOUR" -> CandleInterval.ONE_HOUR;
+            case "4H", "FOUR_HOUR" -> CandleInterval.FOUR_HOUR;
             case "1D", "ONE_DAY" -> CandleInterval.ONE_DAY;
             case "1M", "ONE_MIN" -> CandleInterval.ONE_MIN;
             case "5M", "FIVE_MIN" -> CandleInterval.FIVE_MIN;

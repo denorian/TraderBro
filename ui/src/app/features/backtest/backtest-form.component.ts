@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { InstrumentDto, StrategyDto } from '../../core/models';
 
-type Tf = 'FIFTEEN_MIN' | 'ONE_HOUR' | 'ONE_DAY';
+type Tf = 'FIFTEEN_MIN' | 'ONE_HOUR' | 'FOUR_HOUR' | 'ONE_DAY';
 
 @Component({
   selector: 'app-backtest-form',
@@ -32,20 +32,30 @@ type Tf = 'FIFTEEN_MIN' | 'ONE_HOUR' | 'ONE_DAY';
 
         <fieldset>
           <legend>Инструменты</legend>
-          @for (inst of shares(); track inst.figi) {
-            <label class="row">
-              <input type="checkbox" [checked]="selectedInstruments().includes(inst.figi)"
-                (change)="toggle(selectedInstruments, inst.figi, $event)" />
-              <span>{{ inst.ticker }} (акция)</span>
-            </label>
-          }
-          @for (inst of futures(); track inst.figi) {
-            <label class="row">
-              <input type="checkbox" [checked]="selectedInstruments().includes(inst.figi)"
-                (change)="toggle(selectedInstruments, inst.figi, $event)" />
-              <span>{{ inst.ticker }} (фьючерс)</span>
-            </label>
-          }
+          <div class="group">
+            <div class="group-title">Акции</div>
+            @for (inst of shares(); track inst.figi) {
+              <label class="row">
+                <input type="checkbox" [checked]="selectedInstruments().includes(inst.figi)"
+                  (change)="toggle(selectedInstruments, inst.figi, $event)" />
+                <span>{{ inst.ticker }} — {{ inst.name }}</span>
+              </label>
+            } @empty {
+              <span class="muted">Нет акций</span>
+            }
+          </div>
+          <div class="group">
+            <div class="group-title">Фьючерсы</div>
+            @for (inst of futures(); track inst.figi) {
+              <label class="row">
+                <input type="checkbox" [checked]="selectedInstruments().includes(inst.figi)"
+                  (change)="toggle(selectedInstruments, inst.figi, $event)" />
+                <span>{{ inst.ticker }} — {{ inst.name }}</span>
+              </label>
+            } @empty {
+              <span class="muted">Нет фьючерсов</span>
+            }
+          </div>
         </fieldset>
 
         <div class="field">
@@ -55,6 +65,8 @@ type Tf = 'FIFTEEN_MIN' | 'ONE_HOUR' | 'ONE_DAY';
               (click)="tf.set('FIFTEEN_MIN')">15м</button>
             <button tuiButton size="s" [appearance]="tf() === 'ONE_HOUR' ? 'primary' : 'flat'"
               (click)="tf.set('ONE_HOUR')">1ч</button>
+            <button tuiButton size="s" [appearance]="tf() === 'FOUR_HOUR' ? 'primary' : 'flat'"
+              (click)="tf.set('FOUR_HOUR')">4ч</button>
             <button tuiButton size="s" [appearance]="tf() === 'ONE_DAY' ? 'primary' : 'flat'"
               (click)="tf.set('ONE_DAY')">1д</button>
           </div>
@@ -107,6 +119,10 @@ type Tf = 'FIFTEEN_MIN' | 'ONE_HOUR' | 'ONE_DAY';
       padding: .75rem 1rem; }
     legend { color: var(--tui-text-secondary); padding: 0 .25rem; }
     .row { display: flex; align-items: center; gap: .5rem; padding: .15rem 0; cursor: pointer; }
+    .group { display: flex; flex-direction: column; gap: .1rem; }
+    .group + .group { margin-top: .6rem; }
+    .group-title { color: var(--tui-text-secondary); font-size: .85rem; font-weight: 600;
+      margin-bottom: .15rem; }
     .row2 { display: flex; gap: 1rem; }
     .field { display: flex; flex-direction: column; gap: .25rem; flex: 1; }
     .field input { padding: .35rem .5rem; border: 1px solid var(--tui-border-normal);
@@ -141,15 +157,9 @@ export class BacktestFormComponent implements OnInit {
 
   ngOnInit(): void {
     this.api.strategies().pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((s) => {
-        this.strategies.set(s);
-        this.selectedStrategies.set(s.map((x) => x.id));
-      });
+      .subscribe((s) => this.strategies.set(s));
     this.api.instruments().pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((ins) => {
-        this.instruments.set(ins);
-        this.selectedInstruments.set(ins.map((x) => x.figi));
-      });
+      .subscribe((ins) => this.instruments.set(ins));
   }
 
   toggle(signalList: ReturnType<typeof signal<string[]>>, value: string, event: Event): void {
