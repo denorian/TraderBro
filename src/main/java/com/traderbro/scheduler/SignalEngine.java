@@ -175,8 +175,10 @@ public class SignalEngine {
         log.info("submitted {} lots {} for {} -> status {}", sizing.getLots(),
                 signal.getFigi(), cfg.getId(), order.getStatus());
         if (order.getStatus() == com.traderbro.core.domain.enums.OrderStatus.REJECTED) {
-            publishSignalRejected(cfg, instrument, "RiskGate",
-                    order.getReason() == null ? "rejected" : order.getReason());
+            String reason = order.getReason() == null ? "rejected" : order.getReason();
+            signalRepository.updateVerdict(signal.getId(), com.traderbro.core.domain.enums.SignalVerdict.REJECTED,
+                    reason);
+            publishSignalRejected(cfg, instrument, "RiskGate", reason);
             return;
         }
         java.util.Map<String, Object> payload = new java.util.HashMap<>();

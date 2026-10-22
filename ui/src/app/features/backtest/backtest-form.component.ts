@@ -97,7 +97,7 @@ type Tf = 'FIFTEEN_MIN' | 'ONE_HOUR' | 'FOUR_HOUR' | 'ONE_DAY';
         </div>
 
         <label class="row">
-          <input type="checkbox" [checked]="walkForward()" (change)="walkForward.set(!!$event.target)">
+          <input type="checkbox" [checked]="walkForward()" (change)="toggleWalkForward($event)">
           Walk-forward оптимизация
         </label>
 
@@ -167,6 +167,10 @@ export class BacktestFormComponent implements OnInit {
     signalList.set(checked
       ? [...signalList(), value]
       : signalList().filter((v) => v !== value));
+  }
+
+  toggleWalkForward(event: Event): void {
+    this.walkForward.set((event.target as HTMLInputElement).checked);
   }
 
   parseNum(v: string): number {

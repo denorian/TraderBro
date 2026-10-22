@@ -89,6 +89,24 @@ class BacktestRunnerNoLookAheadTest {
         assertThat(extKeys).containsExactlyElementsOf(baseKeys);
     }
 
+    /**
+     * Slippage is adverse on both legs: a larger value must never improve returns. This is
+     * sensitive to the sign on the exit fill — selling above the market (the pre-fix bug) would
+     * inflate profits as slippage grows.
+     */
+    @Test
+    void higherSlippageNeverImprovesReturns() {
+        BarSeries wave = BarTestData.seriesFrom(i -> 100 + 5 * Math.sin(2 * Math.PI * i / 30.0), 200, "F");
+        double noSlip = runner.runDetailed(strategy, wave, params(), instrument,
+                new BigDecimal("0.0005"), BigDecimal.ZERO,
+                new BigDecimal("100000"), new BigDecimal("0.95")).metrics().totalReturn();
+        double highSlip = runner.runDetailed(strategy, wave, params(), instrument,
+                new BigDecimal("0.0005"), new BigDecimal("50"),
+                new BigDecimal("100000"), new BigDecimal("0.95")).metrics().totalReturn();
+        assertThat(highSlip).isLessThanOrEqualTo(noSlip);
+    }
+
+
     private static List<Double> closes(int n) {
         return java.util.stream.IntStream.range(0, n)
                 .mapToObj(i -> 100 + 5 * Math.sin(2 * Math.PI * i / 30.0))

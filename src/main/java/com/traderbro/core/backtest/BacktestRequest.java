@@ -22,5 +22,6 @@ public record BacktestRequest(
         Map<String, Object> strategyParamsOverrides,
         boolean walkForward,
         Integer walkForwardTrainDays,
-        Integer walkForwardTestDays) {
+        Integer walkForwardTestDays,
+        List<Map<String, String>> walkForwardGrid) {
 }

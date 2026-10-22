@@ -61,6 +61,15 @@ public class SignalRepository {
         return jdbc.query(sql, mapper, java.sql.Timestamp.from(from), java.sql.Timestamp.from(to));
     }
 
+    /** Flips a persisted signal's verdict (e.g. ACCEPTED -> REJECTED) after an order rejection. */
+    public void updateVerdict(UUID id, SignalVerdict verdict, String reason) {
+        named.update("UPDATE signals SET verdict = :verdict, reason = :reason WHERE id = :id",
+                new MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("verdict", verdict.name())
+                        .addValue("reason", reason));
+    }
+
     /** Returns the latest {@code limit} signals ordered by time descending. */
     public List<Signal> findLatest(int limit) {
         String sql = "SELECT " + COLUMNS + " FROM signals ORDER BY ts DESC LIMIT ?";

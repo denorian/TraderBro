@@ -62,26 +62,29 @@ public class BacktestRunner {
                 boolean inPos = open != null;
                 boolean exitSig = inPos && ta4jStrategy.shouldExit(i - 1, record);
                 boolean entrySig = !inPos && ta4jStrategy.shouldEnter(i - 1, record);
-                double openPrice = execPrice(series.getBar(i).getOpenPrice().doubleValue(), slippageBps, false);
+                double rawOpen = series.getBar(i).getOpenPrice().doubleValue();
+                // Slippage is adverse on both legs: fill the buy above market and the sell below.
+                double exitPrice = execPrice(rawOpen, slippageBps, true);
+                double entryPrice = execPrice(rawOpen, slippageBps, false);
                 if (exitSig && inPos) {
-                    double proceeds = qty * openPrice;
+                    double proceeds = qty * exitPrice;
                     double fee = proceeds * commissionPct.doubleValue();
                     equity += proceeds - fee;
-                    record.operate(i, DecimalNum.valueOf(openPrice), DecimalNum.valueOf(qty));
+                    record.operate(i, DecimalNum.valueOf(exitPrice), DecimalNum.valueOf(qty));
                     trades.add(new BacktestTrade(open.getEntryBar(), open.getEntryEquity(), equity,
                             (long) i - open.getEntryBar()));
                     open = null;
                     qty = 0.0;
                 } else if (entrySig && !inPos) {
                     double budget = equity * maxPositionPct.doubleValue();
-                    double notionalPerLot = openPrice * instrument.getLot();
+                    double notionalPerLot = entryPrice * instrument.getLot();
                     long lots = (long) Math.floor(budget / notionalPerLot);
                     if (lots > 0) {
                         qty = lots * instrument.getLot();
-                        double cost = qty * openPrice;
+                        double cost = qty * entryPrice;
                         double fee = cost * commissionPct.doubleValue();
                         equity -= cost + fee;
-                        record.operate(i, DecimalNum.valueOf(openPrice), DecimalNum.valueOf(qty));
+                        record.operate(i, DecimalNum.valueOf(entryPrice), DecimalNum.valueOf(qty));
                         open = new BacktestTrade(i, equity, 0.0, 0);
                     }
                 }
@@ -134,34 +137,37 @@ public class BacktestRunner {
                 boolean inPos = qty > 0;
                 boolean exitSig = inPos && ta4jStrategy.shouldExit(i - 1, record);
                 boolean entrySig = !inPos && ta4jStrategy.shouldEnter(i - 1, record);
-                double openPrice = execPrice(series.getBar(i).getOpenPrice().doubleValue(), slippageBps, false);
+                double rawOpen = series.getBar(i).getOpenPrice().doubleValue();
+                // Slippage is adverse on both legs: fill the buy above market and the sell below.
+                double exitFillPrice = execPrice(rawOpen, slippageBps, true);
+                double entryFillPrice = execPrice(rawOpen, slippageBps, false);
                 if (exitSig && inPos) {
-                    double proceeds = qty * openPrice;
+                    double proceeds = qty * exitFillPrice;
                     double fee = proceeds * commissionPct.doubleValue();
                     equity += proceeds - fee;
-                    record.operate(i, DecimalNum.valueOf(openPrice), DecimalNum.valueOf(qty));
+                    record.operate(i, DecimalNum.valueOf(exitFillPrice), DecimalNum.valueOf(qty));
                     trades.add(toTrade(strategy, instrument, series, entryBar, i, entryPrice,
-                            openPrice, qty, equity - entryEquity, equity, "STRATEGY_EXIT"));
+                            exitFillPrice, qty, equity - entryEquity, equity, "STRATEGY_EXIT"));
                     btTrades.add(new BacktestTrade(entryBar, entryEquity, equity, i - entryBar));
                     signals.add(new SignalRecord(strategy.id(), instrument.getFigi(),
-                            series.getBar(i).getEndTime(), SignalRecord.SignalType.EXIT, openPrice,
+                            series.getBar(i).getEndTime(), SignalRecord.SignalType.EXIT, exitFillPrice,
                             "ACCEPTED", "exit"));
                     qty = 0.0;
                 } else if (entrySig && !inPos) {
                     double budget = equity * maxPositionPct.doubleValue();
-                    double notionalPerLot = openPrice * instrument.getLot();
+                    double notionalPerLot = entryFillPrice * instrument.getLot();
                     long lots = (long) Math.floor(budget / notionalPerLot);
                     if (lots > 0) {
                         qty = lots * instrument.getLot();
-                        double cost = qty * openPrice;
+                        double cost = qty * entryFillPrice;
                         double fee = cost * commissionPct.doubleValue();
                         equity -= cost + fee;
-                        record.operate(i, DecimalNum.valueOf(openPrice), DecimalNum.valueOf(qty));
+                        record.operate(i, DecimalNum.valueOf(entryFillPrice), DecimalNum.valueOf(qty));
                         entryBar = i;
-                        entryPrice = openPrice;
+                        entryPrice = entryFillPrice;
                         entryEquity = equity;
                         signals.add(new SignalRecord(strategy.id(), instrument.getFigi(),
-                                series.getBar(i).getEndTime(), SignalRecord.SignalType.ENTRY, openPrice,
+                                series.getBar(i).getEndTime(), SignalRecord.SignalType.ENTRY, entryFillPrice,
                                 "ACCEPTED", "entry"));
                     }
                 }

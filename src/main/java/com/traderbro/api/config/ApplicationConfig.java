@@ -430,6 +430,18 @@ public class ApplicationConfig {
     }
 
     @Bean
+    public com.traderbro.scheduler.DailySummaryReporter dailySummaryReporter(
+            PortfolioProvider portfolioProvider,
+            com.traderbro.storage.SignalRepository signalRepository,
+            com.traderbro.storage.TradeRepository tradeRepository,
+            KillSwitch killSwitch,
+            StreamHealth streamHealth,
+            TraderEventPublisher publisher) {
+        return new com.traderbro.scheduler.DailySummaryReporter(portfolioProvider,
+                signalRepository, tradeRepository, killSwitch, streamHealth, publisher);
+    }
+
+    @Bean
     public StrategyReloadScheduler strategyReloadScheduler(StrategyRegistry registry) {
         return new StrategyReloadScheduler(registry);
     }

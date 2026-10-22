@@ -207,7 +207,10 @@ public class BacktestOrchestrator {
                 ? request.walkForwardTrainDays() : props.getWalkForward().getTrainDays();
         int testDays = request.walkForwardTestDays() != null
                 ? request.walkForwardTestDays() : props.getWalkForward().getTestDays();
-        List<Map<String, String>> grid = List.of(params);
+        List<Map<String, String>> grid = request.walkForwardGrid();
+        if (grid == null || grid.isEmpty()) {
+            grid = defaultGrid(params);
+        }
         WalkForwardResult wf = walkForwardRunner.run(strategy, series, instrument,
                 trainDays, testDays, grid,
                 WalkForwardRunner.Objective.SHARPE, costs.commissionPct(),
@@ -222,6 +225,34 @@ public class BacktestOrchestrator {
         return PairResult.builder().strategyId(strategy.id()).figi(instrument.getFigi())
                 .metrics(metrics).barsCount(series.getBarCount())
                 .trades(List.of()).signals(List.of()).equity(List.of()).build();
+    }
+
+    /**
+     * Builds a small parameter grid for walk-forward optimisation when the request carries no
+     * explicit {@code walkForwardGrid}: for each numeric parameter of the resolved set, add
+     * variants scaled to 80% and 120%. One parameter is varied at a time so the grid stays small
+     * while still letting the walk-forward pick a better point on train windows.
+     */
+    private List<Map<String, String>> defaultGrid(Map<String, String> base) {
+        List<Map<String, String>> grid = new java.util.ArrayList<>();
+        grid.add(base);
+        for (java.util.Map.Entry<String, String> e : base.entrySet()) {
+            double v;
+            try {
+                v = Double.parseDouble(e.getValue());
+            } catch (NumberFormatException nfe) {
+                continue; // non-numeric parameters are not optimised
+            }
+            if (v <= 0) {
+                continue;
+            }
+            for (double factor : new double[]{0.8, 1.2}) {
+                Map<String, String> variant = new java.util.HashMap<>(base);
+                variant.put(e.getKey(), String.valueOf(Math.round(v * factor * 100) / 100.0));
+                grid.add(variant);
+            }
+        }
+        return grid;
     }
 
     private Map<String, String> resolveParams(String strategyId, BacktestRequest request) {

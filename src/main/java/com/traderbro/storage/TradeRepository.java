@@ -53,4 +53,12 @@ public class TradeRepository implements PositionLedger {
         });
         return shares;
     }
+
+    /** Number of executed fills in the half-open window {@code [from, to)}. */
+    public long countByRange(java.time.Instant from, java.time.Instant to) {
+        Long n = jdbc.queryForObject(
+                "SELECT count(*) FROM trades WHERE ts >= ? AND ts < ?",
+                Long.class, java.sql.Timestamp.from(from), java.sql.Timestamp.from(to));
+        return n == null ? 0 : n;
+    }
 }

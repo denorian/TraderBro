@@ -107,6 +107,12 @@ public class TBankMarketDataProvider implements MarketDataProvider {
                     streamService.newStream(streamId, processor, err -> {
                         log.warn("candle stream error: {}", err.getMessage());
                         sub.connected.set(false);
+                        // An async drop (not a connect failure) must still trigger reconnect with
+                        // backoff; otherwise the subscription stays dead until the kill-switch
+                        // fires. Recovery runs independently of the kill-switch state.
+                        if (!sub.isCancelled()) {
+                            connectWithBackoff(sub, 0);
+                        }
                     });
             subscription.subscribeCandles(sub.figis, toSubscriptionInterval(sub.interval));
             sub.setSubscription(subscription);

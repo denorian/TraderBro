@@ -181,11 +181,18 @@ public class TBankBrokerGateway implements BrokerGateway {
 
     @Override
     public Optional<Instrument> instrumentByFigi(String figi) {
-        Share s = api.getInstrumentsService().getShareByFigiSync(figi);
-        if (s.getFigi() == null || s.getFigi().isBlank()) {
-            return Optional.empty();
+        com.traderbro.data.mapper.SdkInstrumentMapper m =
+                new com.traderbro.data.mapper.SdkInstrumentMapper(moneyScale);
+        ru.tinkoff.piapi.contract.v1.Share s = api.getInstrumentsService().getShareByFigiSync(figi);
+        if (s.getFigi() != null && !s.getFigi().isBlank()) {
+            return Optional.of(m.toInstrument(s));
         }
-        return Optional.of(new com.traderbro.data.mapper.SdkInstrumentMapper(moneyScale).toInstrument(s));
+        // Not a share — fall back to futures so the execution path can resolve a futures FIGI.
+        ru.tinkoff.piapi.contract.v1.Future f = api.getInstrumentsService().getFutureByFigiSync(figi);
+        if (f.getFigi() != null && !f.getFigi().isBlank()) {
+            return Optional.of(m.toInstrument(f));
+        }
+        return Optional.empty();
     }
 
     private BigDecimal fromMoney(MoneyValue m) {
