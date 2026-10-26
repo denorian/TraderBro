@@ -70,7 +70,12 @@ public class StreamManager {
             return;
         }
         List<Instrument> instruments = instrumentRepository.findAllTradable();
-        List<String> figis = instruments.stream().map(Instrument::getFigi).toList();
+        // Crypto is streamed separately via the Binance provider (CryptoStreamRunner); the T-Bank
+        // stream only knows SHARE/FUTURE figis.
+        List<String> figis = instruments.stream()
+                .filter(i -> !i.isCrypto())
+                .map(Instrument::getFigi)
+                .toList();
         if (figis.isEmpty()) {
             log.warn("StreamManager: no tradable instruments to subscribe to");
             return;

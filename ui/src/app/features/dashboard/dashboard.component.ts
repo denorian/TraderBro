@@ -11,6 +11,7 @@ import { PricePipe } from '../../shared/pipes/price.pipe';
 import { MoneyRubPipe } from '../../shared/pipes/money-rub.pipe';
 import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
 import { instrumentLabel as il, instrumentMap } from '../../shared/instrument-label';
+import { capLabel as capLabelFn, priceDecimals as priceDecimalsFn, typeLabel as typeLabelFn } from './crypto-format';
 
 @Component({
   selector: 'app-dashboard',
@@ -53,6 +54,7 @@ import { instrumentLabel as il, instrumentMap } from '../../shared/instrument-la
         <option value="">Все</option>
         <option value="SHARE">Акции</option>
         <option value="FUTURE">Фьючерсы</option>
+        <option value="CRYPTO">Криптовалюты</option>
       </select>
     </div>
 
@@ -69,10 +71,12 @@ import { instrumentLabel as il, instrumentMap } from '../../shared/instrument-la
           <tr>
             <th tuiTh>Инструмент</th>
             <th tuiTh>Тип</th>
+            <th tuiTh>Цена</th>
             <th tuiTh>AO</th>
             <th tuiTh>Фаза</th>
             <th tuiTh>Дивергенция AO</th>
             <th tuiTh>Ангуляция</th>
+            <th tuiTh>Капитализация</th>
           </tr>
         </thead>
         <tbody tuiTbody>
@@ -82,7 +86,13 @@ import { instrumentLabel as il, instrumentMap } from '../../shared/instrument-la
                 <strong>{{ row.ticker }}</strong>
                 <div class="inst-name">{{ row.name }}</div>
               </td>
-              <td tuiTd><tui-badge appearance="neutral">{{ row.type === 'FUTURE' ? 'фьючерс' : 'акция' }}</tui-badge></td>
+              <td tuiTd>
+                <span class="type-badge" [class.type-crypto]="row.type === 'CRYPTO'"
+                  [class.type-future]="row.type === 'FUTURE'">{{ typeLabel(row.type) }}</span>
+              </td>
+              <td tuiTd>
+                {{ row.price | price:priceDecimals(row.type) }}
+              </td>
               <td tuiTd>
                 <span [class.tp-profit]="(row.ao ?? 0) > 0" [class.tp-loss]="(row.ao ?? 0) < 0">
                   {{ row.ao | price:2 }}
@@ -107,9 +117,16 @@ import { instrumentLabel as il, instrumentMap } from '../../shared/instrument-la
                   <span class="muted">—</span>
                 }
               </td>
+              <td tuiTd>
+                @if (row.marketCapUsd != null) {
+                  <span>{{ capLabel(row.marketCapUsd) }}</span>
+                } @else {
+                  <span class="muted">—</span>
+                }
+              </td>
             </tr>
           } @empty {
-            <tr tuiTr><td tuiTd colspan="6">Нет инструментов</td></tr>
+            <tr tuiTr><td tuiTd colspan="8">Нет инструментов</td></tr>
           }
         </tbody>
       </table>
@@ -156,6 +173,10 @@ import { instrumentLabel as il, instrumentMap } from '../../shared/instrument-la
     .side { display: flex; flex-direction: column; gap: 1rem; }
     .side ul { list-style: none; margin: 0; padding: 0; }
     .muted { color: var(--tui-text-secondary); }
+    .type-badge { display: inline-block; padding: .1rem .4rem; border-radius: var(--tui-radius-m);
+      font-size: .72rem; background: var(--tui-background-neutral-1); color: var(--tui-text-primary); }
+    .type-crypto { background: #4b2e83; color: #fff; }
+    .type-future { background: #1f3a5f; color: #fff; }
     @media (max-width: 1280px) { .tables { grid-template-columns: 1fr; } .tables table { display: block; overflow-x: auto; } }
   `]
 })
@@ -164,7 +185,7 @@ export class DashboardComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
-  readonly columns = ['ticker', 'type', 'ao', 'state', 'divergence', 'angulation'];
+  readonly columns = ['ticker', 'type', 'price', 'ao', 'state', 'divergence', 'angulation', 'cap'];
   readonly typeFilter = signal('');
   readonly status = signal<StatusResponse | null>(null);
   readonly instruments = signal<InstrumentDto[]>([]);
@@ -178,6 +199,11 @@ export class DashboardComponent implements OnInit {
   pnl(): number | null {
     return this.status()?.portfolio?.dayPnl ?? null;
   }
+
+  /** Pure formatting helpers exposed for the template (avoiding name clash with the imports). */
+  readonly typeLabel = typeLabelFn;
+  readonly priceDecimals = priceDecimalsFn;
+  readonly capLabel = capLabelFn;
 
   /** Exposed for templates; maps a figi to "TICKER — Name". */
   readonly instrumentLabel = il;
@@ -241,6 +267,8 @@ export class DashboardComponent implements OnInit {
         ticker: inst.ticker,
         name: inst.name,
         type: inst.type,
+        price: inst.price ?? null,
+        marketCapUsd: inst.marketCapUsd ?? null,
         ao: typeof ao['ao'] === 'number' ? ao['ao'] : null,
         state: String(all['state'] ?? 'SLEEPING'),
         divergence: divByFigi.get(inst.figi) ?? null,
@@ -286,6 +314,8 @@ interface Row {
   ticker: string;
   name: string;
   type: string;
+  price: number | null;
+  marketCapUsd: number | null;
   ao: number | null;
   state: string;
   divergence: DivergenceEventDto | null;

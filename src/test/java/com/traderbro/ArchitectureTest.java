@@ -59,4 +59,11 @@ class ArchitectureTest {
                 .should().dependOnClassesThat().resideInAPackage(NOTIFY)
                 .check(new ClassFileImporter().importPackages("com.traderbro"));
     }
+
+    @Test
+    void binanceDataDoesNotDependOnTbankData() {
+        noClasses().that().resideInAPackage("com.traderbro.data.binance..")
+                .should().dependOnClassesThat().resideInAPackage("com.traderbro.data.tbank..")
+                .check(new ClassFileImporter().importPackages("com.traderbro"));
+    }
 }

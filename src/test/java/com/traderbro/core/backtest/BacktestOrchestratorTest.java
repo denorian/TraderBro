@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.traderbro.api.config.BacktestProperties;
+import com.traderbro.api.config.CryptoProperties;
 import com.traderbro.core.domain.Instrument;
 import com.traderbro.core.domain.enums.CandleInterval;
 import com.traderbro.core.domain.enums.InstrumentType;
@@ -47,7 +48,7 @@ class BacktestOrchestratorTest {
 
     private BacktestOrchestrator orchestrator() {
         return new BacktestOrchestrator(runner, wf, barStore, instruments, repository, registry,
-                configProvider, publisher, "test", props);
+                configProvider, publisher, "test", props, new CryptoProperties());
     }
 
     private BacktestRequest validRequest() {

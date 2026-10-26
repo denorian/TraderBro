@@ -31,8 +31,18 @@ public class Instrument {
     InstrumentType instrumentType = InstrumentType.SHARE;
     /** Futures-only attributes; null for shares. */
     FutureSpec futureSpec;
+    /** Crypto-only attributes; null for shares/futures. */
+    CryptoSpec cryptoSpec;
+    /** Market capitalisation in USD (crypto), refreshed daily from CoinGecko; null otherwise. */
+    BigDecimal marketCapUsd;
+    /** Market-cap rank (crypto), from CoinGecko; null otherwise. */
+    Integer marketCapRank;
 
     public boolean isFuture() {
         return instrumentType == InstrumentType.FUTURE;
+    }
+
+    public boolean isCrypto() {
+        return instrumentType == InstrumentType.CRYPTO;
     }
 }

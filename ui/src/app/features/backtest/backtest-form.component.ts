@@ -56,6 +56,18 @@ type Tf = 'FIFTEEN_MIN' | 'ONE_HOUR' | 'FOUR_HOUR' | 'ONE_DAY';
               <span class="muted">Нет фьючерсов</span>
             }
           </div>
+          <div class="group">
+            <div class="group-title">Криптовалюты</div>
+            @for (inst of cryptos(); track inst.figi) {
+              <label class="row">
+                <input type="checkbox" [checked]="selectedInstruments().includes(inst.figi)"
+                  (change)="toggle(selectedInstruments, inst.figi, $event)" />
+                <span>{{ inst.ticker }} — {{ inst.name }}</span>
+              </label>
+            } @empty {
+              <span class="muted">Нет криптовалют</span>
+            }
+          </div>
         </fieldset>
 
         <div class="field">
@@ -154,6 +166,7 @@ export class BacktestFormComponent implements OnInit {
 
   readonly shares = () => this.instruments().filter((i) => i.type === 'SHARE');
   readonly futures = () => this.instruments().filter((i) => i.type === 'FUTURE');
+  readonly cryptos = () => this.instruments().filter((i) => i.type === 'CRYPTO');
 
   ngOnInit(): void {
     this.api.strategies().pipe(takeUntilDestroyed(this.destroyRef))

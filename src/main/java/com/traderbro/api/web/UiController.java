@@ -47,16 +47,21 @@ public class UiController {
 
     // ------------------------------------------------------------------ /api/instruments
     public record InstrumentDto(String figi, String ticker, String name, String type,
-                                String currency, int lot, boolean tradable, boolean streamUp) {
+                                String currency, int lot, boolean tradable, boolean streamUp,
+                                BigDecimal marketCapUsd, Integer marketCapRank, BigDecimal price) {
     }
 
     @GetMapping("/instruments")
     public List<InstrumentDto> instruments() {
         boolean connected = streamHealth.isConnected();
-        return instruments.findAllTradable().stream()
+        List<Instrument> all = instruments.findAllTradable();
+        java.util.Map<String, BigDecimal> closes = barStore.latestCloses(
+                all.stream().map(Instrument::getFigi).toList(), CandleInterval.ONE_HOUR);
+        return all.stream()
                 .map(i -> new InstrumentDto(i.getFigi(), i.getTicker(), i.getName(),
                         i.getInstrumentType().name(), i.getCurrency(), i.getLot(),
-                        i.isTradable(), connected))
+                        i.isTradable(), connected, i.getMarketCapUsd(), i.getMarketCapRank(),
+                        closes.get(i.getFigi())))
                 .toList();
     }
 

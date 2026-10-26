@@ -25,6 +25,28 @@ tbank:
 instruments:
   tickers: [SBER, GAZP, LKOH, YDEX, VTBR, TCSG, PLZL, NVTK, ROSN, TATN, GMKN, MOEX, X5, SIBN, TRNFP, SPBE]
 
+crypto:
+  enabled: ${CRYPTO_ENABLED:true}
+  binance:
+    base-url: https://api.binance.com
+    ws-url: wss://stream.binance.com:9443
+    rate-limit-weight-per-min: 1100
+    connect-timeout-ms: 5000
+    read-timeout-ms: 10000
+  pairs: [BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT]
+  timeframes: [FIFTEEN_MIN, ONE_HOUR, FOUR_HOUR, ONE_DAY]
+  history:
+    load-on-startup: ${CRYPTO_HISTORY_LOAD_ON_STARTUP:true}
+    days-daily: 1095
+    days-intraday: 90
+    days-hourly: 400
+  taker-fee-pct: 0.1
+  slippage-bps: 5
+  coingecko:
+    enabled: ${COINGECKO_ENABLED:true}
+    base-url: https://api.coingecko.com/api/v3
+    update-cron: "0 0 8 * * *"
+
 risk:
   daily-loss-limit-pct: 0.02
   position-limit-pct: 0.10

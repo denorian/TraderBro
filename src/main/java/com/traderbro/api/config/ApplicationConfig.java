@@ -83,8 +83,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import ru.tinkoff.piapi.core.InvestApi;
@@ -98,7 +100,7 @@ import ru.tinkoff.piapi.core.InvestApi;
 @EnableConfigurationProperties({AppProperties.class, TBankProperties.class,
         RiskProperties.class, ExecutionProperties.class, FuturesProperties.class,
         IndicatorsProperties.class, BacktestProperties.class, InstrumentsProperties.class,
-        WilliamsProperties.class, AoDivergenceProperties.class,
+        WilliamsProperties.class, AoDivergenceProperties.class, CryptoProperties.class,
         com.traderbro.notify.telegram.TelegramProperties.class})
 public class ApplicationConfig {
 
@@ -134,6 +136,7 @@ public class ApplicationConfig {
     }
 
     @Bean
+    @Primary
     public MarketDataProvider marketDataProvider(InvestApi api, SdkBarMapper barMapper,
                                                  SdkInstrumentMapper instMapper, AppProperties app,
                                                  RetryPolicy retryPolicy, TBankProperties tbank) {
@@ -410,10 +413,11 @@ public class ApplicationConfig {
                                                      StrategyRegistry registry,
                                                      StrategyConfigProvider configProvider,
                                                      TraderEventPublisher publisher,
-                                                     BacktestProperties props) {
+                                                     BacktestProperties props,
+                                                     CryptoProperties cryptoProps) {
         return new BacktestOrchestrator(runner, walkForwardRunner, barStore, instruments,
                 batchRepo, registry, configProvider, publisher,
-                System.getenv().getOrDefault("BUILD_GIT_HASH", "dev"), props);
+                System.getenv().getOrDefault("BUILD_GIT_HASH", "dev"), props, cryptoProps);
     }
 
     @Bean
@@ -451,6 +455,46 @@ public class ApplicationConfig {
                                                                  InstrumentRepository repo,
                                                                  InstrumentsProperties instruments) {
         return new InstrumentRefreshScheduler(md, repo, instruments.getTickers());
+    }
+
+    // ------------------------------------------------------------------ crypto (Binance, read-only)
+
+    @Bean
+    @ConditionalOnProperty(name = "crypto.enabled", havingValue = "true", matchIfMissing = true)
+    public com.traderbro.data.binance.BinanceMarketDataProvider binanceMarketDataProvider(
+            CryptoProperties crypto) {
+        return new com.traderbro.data.binance.BinanceMarketDataProvider(crypto);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "crypto.enabled", havingValue = "true", matchIfMissing = true)
+    public com.traderbro.data.binance.CoinGeckoClient coinGeckoClient(CryptoProperties crypto) {
+        return new com.traderbro.data.binance.CoinGeckoClient(crypto.getCoingecko().getBaseUrl());
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "crypto.enabled", havingValue = "true", matchIfMissing = true)
+    public com.traderbro.data.binance.CryptoHistoryLoader cryptoHistoryLoader(
+            com.traderbro.data.binance.BinanceMarketDataProvider md, BarStore barStore,
+            InstrumentRepository instruments, CryptoProperties crypto) {
+        return new com.traderbro.data.binance.CryptoHistoryLoader(md, barStore, instruments, crypto);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "crypto.enabled", havingValue = "true", matchIfMissing = true)
+    public com.traderbro.scheduler.CryptoRefreshScheduler cryptoRefreshScheduler(
+            com.traderbro.data.binance.BinanceMarketDataProvider md, InstrumentRepository repo,
+            com.traderbro.data.binance.CoinGeckoClient coinGecko, CryptoProperties crypto) {
+        return new com.traderbro.scheduler.CryptoRefreshScheduler(md, repo, coinGecko, crypto);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "crypto.enabled", havingValue = "true", matchIfMissing = true)
+    public com.traderbro.scheduler.CryptoStreamRunner cryptoStreamRunner(
+            com.traderbro.data.binance.BinanceMarketDataProvider md, BarStore barStore,
+            com.traderbro.core.indicators.IndicatorSnapshotService snapshotService,
+            CryptoProperties crypto) {
+        return new com.traderbro.scheduler.CryptoStreamRunner(md, barStore, snapshotService, crypto);
     }
 
     @Bean

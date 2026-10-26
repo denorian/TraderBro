@@ -4,11 +4,14 @@ export interface InstrumentDto {
   figi: string;
   ticker: string;
   name: string;
-  type: 'SHARE' | 'FUTURE';
+  type: 'SHARE' | 'FUTURE' | 'CRYPTO';
   currency?: string;
   lot: number;
   tradable: boolean;
   streamUp: boolean;
+  marketCapUsd?: number | null;
+  marketCapRank?: number | null;
+  price?: number | null;
 }
 
 export interface BarDto {

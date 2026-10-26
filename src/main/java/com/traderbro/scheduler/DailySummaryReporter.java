@@ -79,6 +79,7 @@ public class DailySummaryReporter {
         payload.put("killSwitch", killSwitch.isActive() ? "АКТИВЕН" : "выключен");
         payload.put("stream", streamHealth.isConnected() ? "OK"
                 : streamHealth.isDegraded() ? "DEGRADED" : "нет данных");
+        payload.put("cryptoStatus", "не торгуется (анализ)");
         payload.put("ts", now.atZone(MOSCOW).format(TS_FMT));
 
         publisher.publish(TraderEvent.of(NotificationType.DAILY_SUMMARY, NotificationLevel.INFO, payload));

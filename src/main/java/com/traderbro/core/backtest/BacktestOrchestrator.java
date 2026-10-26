@@ -1,6 +1,7 @@
 package com.traderbro.core.backtest;
 
 import com.traderbro.api.config.BacktestProperties;
+import com.traderbro.api.config.CryptoProperties;
 import com.traderbro.core.domain.Bar;
 import com.traderbro.core.domain.Instrument;
 import com.traderbro.core.domain.StrategyConfig;
@@ -55,6 +56,7 @@ public class BacktestOrchestrator {
     private final TraderEventPublisher publisher;
     private final String codeVersion;
     private final BacktestProperties props;
+    private final CryptoProperties cryptoProps;
     private final ExecutorService executor;
     private final Map<String, Future<?>> futures = new ConcurrentHashMap<>();
 
@@ -63,7 +65,7 @@ public class BacktestOrchestrator {
                                 BacktestBatchRepository repository, StrategyRegistry registry,
                                 StrategyConfigProvider configProvider,
                                 TraderEventPublisher publisher, String codeVersion,
-                                BacktestProperties props) {
+                                BacktestProperties props, CryptoProperties cryptoProps) {
         this.runner = runner;
         this.walkForwardRunner = walkForwardRunner;
         this.barStore = barStore;
@@ -74,6 +76,7 @@ public class BacktestOrchestrator {
         this.publisher = publisher;
         this.codeVersion = codeVersion;
         this.props = props;
+        this.cryptoProps = cryptoProps;
         // Isolated pool: backtests must not compete with the live trading loop for CPU.
         this.executor = Executors.newFixedThreadPool(props.getExecutorPoolSize(),
                 r -> {
@@ -152,6 +155,13 @@ public class BacktestOrchestrator {
         BarSeries series = SeriesFactory.fromDomain(bars, DecimalNum::valueOf, bars.size() + 10,
                 pair.figi());
         BacktestCosts costs = resolveCosts(request.costs());
+        // Crypto spot uses Binance's taker fee by default (0.1%) unless the caller overrode it.
+        if (instrument.isCrypto() && request.costs() == null) {
+            costs = new BacktestCosts(
+                    BigDecimal.valueOf(cryptoProps.getTakerFeePct()).movePointLeft(2),
+                    cryptoProps.getSlippageBps(),
+                    costs.initialCapital(), costs.maxPositionPct());
+        }
 
         PairResult result;
         if (request.walkForward()) {

@@ -21,16 +21,20 @@ public class InstrumentRepository {
     private static final String COLS =
             "figi, ticker, name, isin, currency, lot, min_price_increment, board, tradable, "
                     + "instrument_type, basic_asset, min_price_increment_amount, "
-                    + "expiration_date, first_trade_date, initial_margin";
+                    + "expiration_date, first_trade_date, initial_margin, "
+                    + "base_asset, quote_asset, tick_size, step_size, min_notional, onboard_date, "
+                    + "market_cap_usd, market_cap_rank";
 
     private static final String UPSERT = """
             INSERT INTO instruments (figi, ticker, name, isin, currency, lot, min_price_increment,
                                      board, tradable, updated_at, instrument_type, basic_asset,
                                      min_price_increment_amount, expiration_date, first_trade_date,
-                                     initial_margin)
+                                     initial_margin, base_asset, quote_asset, tick_size, step_size,
+                                     min_notional, onboard_date, market_cap_usd, market_cap_rank)
             VALUES (:figi, :ticker, :name, :isin, :currency, :lot, :minStep, :board, :tradable,
                     :updatedAt, :instrumentType, :basicAsset, :minStepAmount, :expirationDate,
-                    :firstTradeDate, :initialMargin)
+                    :firstTradeDate, :initialMargin, :baseAsset, :quoteAsset, :tickSize, :stepSize,
+                    :minNotional, :onboardDate, :marketCapUsd, :marketCapRank)
             ON CONFLICT (figi) DO UPDATE SET ticker=EXCLUDED.ticker, name=EXCLUDED.name,
                 isin=EXCLUDED.isin, currency=EXCLUDED.currency, lot=EXCLUDED.lot,
                 min_price_increment=EXCLUDED.min_price_increment, board=EXCLUDED.board,
@@ -38,7 +42,11 @@ public class InstrumentRepository {
                 instrument_type=EXCLUDED.instrument_type, basic_asset=EXCLUDED.basic_asset,
                 min_price_increment_amount=EXCLUDED.min_price_increment_amount,
                 expiration_date=EXCLUDED.expiration_date, first_trade_date=EXCLUDED.first_trade_date,
-                initial_margin=EXCLUDED.initial_margin
+                initial_margin=EXCLUDED.initial_margin,
+                base_asset=EXCLUDED.base_asset, quote_asset=EXCLUDED.quote_asset,
+                tick_size=EXCLUDED.tick_size, step_size=EXCLUDED.step_size,
+                min_notional=EXCLUDED.min_notional, onboard_date=EXCLUDED.onboard_date,
+                market_cap_usd=EXCLUDED.market_cap_usd, market_cap_rank=EXCLUDED.market_cap_rank
             """;
 
     private final NamedParameterJdbcTemplate named;
@@ -73,9 +81,29 @@ public class InstrumentRepository {
                                 ? null : java.sql.Date.valueOf(i.getFutureSpec().getExpirationDate()))
                         .addValue("firstTradeDate", i.getFutureSpec() == null || i.getFutureSpec().getFirstTradeDate() == null
                                 ? null : java.sql.Date.valueOf(i.getFutureSpec().getFirstTradeDate()))
-                        .addValue("initialMargin", i.getFutureSpec() == null ? null : i.getFutureSpec().getInitialMargin()))
+                        .addValue("initialMargin", i.getFutureSpec() == null ? null : i.getFutureSpec().getInitialMargin())
+                        .addValue("baseAsset", i.getCryptoSpec() == null ? null : i.getCryptoSpec().getBaseAsset())
+                        .addValue("quoteAsset", i.getCryptoSpec() == null ? null : i.getCryptoSpec().getQuoteAsset())
+                        .addValue("tickSize", i.getCryptoSpec() == null ? null : i.getCryptoSpec().getTickSize())
+                        .addValue("stepSize", i.getCryptoSpec() == null ? null : i.getCryptoSpec().getStepSize())
+                        .addValue("minNotional", i.getCryptoSpec() == null ? null : i.getCryptoSpec().getMinNotional())
+                        .addValue("onboardDate", i.getCryptoSpec() == null || i.getCryptoSpec().getOnboardDate() == null
+                                ? null : java.sql.Date.valueOf(i.getCryptoSpec().getOnboardDate()))
+                        .addValue("marketCapUsd", i.getMarketCapUsd())
+                        .addValue("marketCapRank", i.getMarketCapRank()))
                 .toArray(MapSqlParameterSource[]::new);
         named.batchUpdate(UPSERT, batch);
+    }
+
+    /** Refreshes the market-cap metadata for a crypto instrument (CoinGecko daily job). */
+    public void updateMarketCap(String figi, java.math.BigDecimal capUsd, Integer rank) {
+        named.update("UPDATE instruments SET market_cap_usd=:cap, market_cap_rank=:rank, "
+                        + "market_cap_updated_at=:at WHERE figi=:figi",
+                new MapSqlParameterSource()
+                        .addValue("cap", capUsd)
+                        .addValue("rank", rank)
+                        .addValue("at", java.sql.Timestamp.from(Instant.now()))
+                        .addValue("figi", figi));
     }
 
     public List<Instrument> findByTickerIn(List<String> tickers) {
@@ -120,6 +148,8 @@ public class InstrumentRepository {
                     .minPriceIncrement(minStepValue)
                     .board(rs.getString("board"))
                     .tradable(rs.getBoolean("tradable"))
+                    .marketCapUsd(rs.getBigDecimal("market_cap_usd"))
+                    .marketCapRank((Integer) rs.getObject("market_cap_rank"))
                     .instrumentType(instrumentType);
 
             if (instrumentType == com.traderbro.core.domain.enums.InstrumentType.FUTURE) {
@@ -140,6 +170,19 @@ public class InstrumentRepository {
                         .initialMargin(margin == null ? BigDecimal.ZERO.setScale(moneyScale) : margin)
                         .build();
                 b.futureSpec(spec);
+            } else if (instrumentType == com.traderbro.core.domain.enums.InstrumentType.CRYPTO) {
+                java.sql.Date onboard = rs.getDate("onboard_date");
+                com.traderbro.core.domain.CryptoSpec spec = com.traderbro.core.domain.CryptoSpec.builder()
+                        .figi(rs.getString("figi"))
+                        .ticker(rs.getString("ticker"))
+                        .baseAsset(rs.getString("base_asset"))
+                        .quoteAsset(rs.getString("quote_asset"))
+                        .tickSize(rs.getBigDecimal("tick_size"))
+                        .stepSize(rs.getBigDecimal("step_size"))
+                        .minNotional(rs.getBigDecimal("min_notional"))
+                        .onboardDate(onboard == null ? null : onboard.toLocalDate())
+                        .build();
+                b.cryptoSpec(spec);
             }
             return b.build();
         }

@@ -2,6 +2,7 @@ package com.traderbro.core.domain.spi;
 
 import com.traderbro.core.domain.Bar;
 import com.traderbro.core.domain.enums.CandleInterval;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -23,4 +24,10 @@ public interface BarStore {
 
     /** Latest bar timestamp for a figi+interval, or empty if none are stored. */
     java.util.Optional<Instant> latestTs(String figi, CandleInterval interval);
+
+    /** Earliest bar timestamp for a figi+interval, or empty if none are stored. */
+    java.util.Optional<Instant> earliestTs(String figi, CandleInterval interval);
+
+    /** Latest close price for each requested figi at an interval (absent keys have no bars). */
+    java.util.Map<String, BigDecimal> latestCloses(java.util.List<String> figis, CandleInterval interval);
 }

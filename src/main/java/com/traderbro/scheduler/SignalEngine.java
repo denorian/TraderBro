@@ -106,6 +106,13 @@ public class SignalEngine {
             publishSignalRejected(cfg, instrument, raw.getVerdict().name(), raw.getReason());
             return;
         }
+        // Crypto is analysis + backtest only in this stage: publish the signal for visibility
+        // but never place an order (Binance trade execution is a stage-4 TODO).
+        if (instrument.isCrypto()) {
+            log.info("crypto analysis-only signal {} for {} — no order", cfg.getId(), figi);
+            publishObserveOnlySignal(cfg, instrument, raw);
+            return;
+        }
         if (stateRecovery.isObserveOnly()) {
             log.info("observe-only: signal {} for {} — signal only, no order", cfg.getId(), figi);
             publishObserveOnlySignal(cfg, instrument, raw);
@@ -133,8 +140,7 @@ public class SignalEngine {
         payload.put("ticker", instrument.getTicker());
         payload.put("strategy", cfg.getId());
         payload.put("dirMark", dirMark(signal.getDirection()));
-        payload.put("typeLabel", instrument.isFuture()
-                ? "фьючерс, " + instrument.getFutureSpec().getBasicAsset() : "акция");
+        payload.put("typeLabel", typeLabel(instrument));
         payload.put("price", signal.getPrice());
         payload.put("indicators", snapshotString(signal));
         try {
@@ -149,7 +155,8 @@ public class SignalEngine {
         } catch (Exception e) {
             log.warn("observe-only: sizing skipped for {}: {}", signal.getFigi(), e.getMessage());
         }
-        payload.put("note", "сигнал без торговли (observe-only)");
+        payload.put("note", instrument.isCrypto()
+                ? "крипто: анализ без торговли (этап 4)" : "сигнал без торговли (observe-only)");
         publisher.publish(TraderEvent.of(NotificationType.SIGNAL_ENTRY,
                 NotificationLevel.INFO, payload));
     }
@@ -185,7 +192,7 @@ public class SignalEngine {
         payload.put("ticker", instrument.getTicker());
         payload.put("strategy", cfg.getId());
         payload.put("dirMark", dirMark(signal.getDirection()));
-        payload.put("typeLabel", instrument.isFuture() ? "фьючерс, " + instrument.getFutureSpec().getBasicAsset() : "акция");
+        payload.put("typeLabel", typeLabel(instrument));
         payload.put("price", signal.getPrice());
         payload.put("qty", sizing.getLots());
         payload.put("qtyUnit", instrument.isFuture() ? "контр." : "лот");
@@ -211,5 +218,16 @@ public class SignalEngine {
 
     private String dirMark(com.traderbro.core.domain.enums.Direction direction) {
         return direction == com.traderbro.core.domain.enums.Direction.SHORT ? "📉 SHORT" : "📈 LONG";
+    }
+
+    /** Human-readable instrument type label for Telegram payloads. */
+    private static String typeLabel(Instrument instrument) {
+        if (instrument.isFuture()) {
+            return "фьючерс, " + instrument.getFutureSpec().getBasicAsset();
+        }
+        if (instrument.isCrypto()) {
+            return "криптовалюта, " + instrument.getTicker();
+        }
+        return "акция";
     }
 }
