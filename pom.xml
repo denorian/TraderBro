@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.1</version>
+        <version>4.1.2</version>
         <relativePath/>
     </parent>
 
@@ -28,9 +28,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- Framework -->
-        <!-- TODO: verify latest 4.0.x patch on Maven Central. If 4.0.x is
-             incompatible with the pinned grpc/java-sdk-core, fall back to 3.5.x. -->
-        <spring-boot.version>4.0.1</spring-boot.version>
+        <!-- Version is set by the spring-boot-starter-parent POM above (4.1.2). -->
 
         <!-- Technical analysis -->
         <ta4j.version>0.24.1</ta4j.version>
@@ -42,32 +40,32 @@
         <!-- T-Bank Invest API Java SDK -->
         <!-- verified on Maven Central: ru.tinkoff.piapi:java-sdk-core latest = 1.36 -->
         <tinkoff-invest.version>1.36</tinkoff-invest.version>
-        <logstash-logback.version>8.0</logstash-logback.version>
+        <logstash-logback.version>9.0</logstash-logback.version>
 
         <!-- Boilerplate -->
-        <!-- TODO: verify latest Lombok build supporting Java 25 -->
-        <lombok.version>1.18.42</lombok.version>
+        <!-- bumped to 1.18.48 (latest patch, keeps Java 25 support). -->
+        <lombok.version>1.18.48</lombok.version>
 
         <!-- Database -->
-        <postgresql.version>42.7.5</postgresql.version>
+        <postgresql.version>42.7.14</postgresql.version>
         <liquibase.version>4.31.1</liquibase.version>
         <timescaledb.version>2.19.0</timescaledb.version>
 
         <!-- Testing -->
-        <junit.version>5.12.2</junit.version>
-        <mockito.version>5.17.0</mockito.version>
-        <testcontainers.version>1.21.3</testcontainers.version>
-        <archunit.version>1.4.0</archunit.version>
+        <junit.version>5.14.4</junit.version>
+        <mockito.version>5.24.0</mockito.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
+        <archunit.version>1.5.1</archunit.version>
 
         <!-- Quality -->
         <checkstyle.version>10.21.4</checkstyle.version>
-        <spotbugs.version>4.9.2</spotbugs.version>
+        <spotbugs.version>4.10.5.0</spotbugs.version>
         <owasp.version>11.1.1</owasp.version>
 
         <!-- Plugins -->
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
-        <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
-        <jacoco.version>0.8.13</jacoco.version>
+        <maven-surefire-plugin.version>3.6.1</maven-surefire-plugin.version>
+        <jacoco.version>0.8.16</jacoco.version>
 
         <!-- project meta for backtest_runs.code_version -->
         <git-hash>${maven.build.timestamp}</git-hash>
