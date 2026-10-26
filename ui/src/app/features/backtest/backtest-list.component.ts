@@ -25,7 +25,7 @@ import { instrumentLabel as il, instrumentMap } from '../../shared/instrument-la
           <div class="card">
             <div class="top">
               <strong>{{ run.id.slice(0, 8) }}</strong>
-              <tui-badge [appearance]="badge(run.status)">{{ run.status }}</tui-badge>
+              <span tuiBadge [appearance]="badge(run.status)">{{ run.status }}</span>
               <span class="muted">{{ run.createdAt | mskTime }}</span>
             </div>
             <div class="row">Стратегии: <span>{{ run.request.strategyIds.join(', ') }}</span></div>
@@ -103,8 +103,8 @@ export class BacktestListComponent implements OnInit {
 
   badge(status: string): string {
     switch (status) {
-      case 'COMPLETED': return 'success';
-      case 'FAILED': return 'error';
+      case 'COMPLETED': return 'positive';
+      case 'FAILED': return 'negative';
       case 'RUNNING': return 'info';
       case 'CANCELLED': return 'neutral';
       default: return 'neutral';

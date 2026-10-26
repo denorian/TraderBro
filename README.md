@@ -4,7 +4,7 @@ Stage-1 trading engine for MOEX equities (TQBR board) that talks to the
 T-Bank Invest API (market data + execution), runs technical analysis on **ta4j**, backtests
 with costs and walk-forward validation, enforces a hard risk perimeter, and places orders in
 **sandbox mode**. Java 25, Spring Boot 4.1.2 (embedded **Jetty**), mono-module,
-PostgreSQL/TimescaleDB, T-Bank SDK 1.51 (low-level gRPC), Angular 20 web UI.
+PostgreSQL/TimescaleDB, T-Bank SDK 1.51 (low-level gRPC), Angular 22 + Taiga UI 5 web UI.
 
 Stage 2 adds **futures (FORTS)** support and **Telegram notifications** with a persistent,
 retryable outbound queue and read-only bot commands.

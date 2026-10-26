@@ -43,8 +43,8 @@ describe('DashboardComponent', () => {
   });
 
   it('maps Alligator phases to badge appearances', () => {
-    expect(component.stateAppearance('EATING_BULL')).toBe('success');
-    expect(component.stateAppearance('EATING_BEAR')).toBe('error');
+    expect(component.stateAppearance('EATING_BULL')).toBe('positive');
+    expect(component.stateAppearance('EATING_BEAR')).toBe('negative');
     expect(component.stateAppearance('AWAKENING')).toBe('warning');
     expect(component.stateAppearance('SLEEPING')).toBe('neutral');
   });

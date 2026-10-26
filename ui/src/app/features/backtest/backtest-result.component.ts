@@ -22,8 +22,8 @@ import { MskTimePipe } from '../../shared/pipes/msk-time.pipe';
       <header class="head">
         <a tuiButton appearance="flat" size="s" routerLink="/backtest">← Список</a>
         <h2>Бэктест {{ runId() }}</h2>
-        <tui-badge appearance="neutral">{{ intervalLabel(run()?.request?.interval ?? '') }}</tui-badge>
-        <tui-badge [appearance]="badge(run()?.status ?? '')">{{ run()?.status ?? '' }}</tui-badge>
+        <span tuiBadge appearance="neutral">{{ intervalLabel(run()?.request?.interval ?? '') }}</span>
+        <span tuiBadge [appearance]="badge(run()?.status ?? '')">{{ run()?.status ?? '' }}</span>
       </header>
 
       <section>
@@ -217,7 +217,7 @@ export class BacktestResultComponent implements OnInit, AfterViewInit {
   }
 
   badge(status: string): string {
-    return status === 'COMPLETED' ? 'success' : status === 'FAILED' ? 'error'
+    return status === 'COMPLETED' ? 'positive' : status === 'FAILED' ? 'negative'
       : status === 'RUNNING' ? 'info' : 'neutral';
   }
 

@@ -46,7 +46,7 @@ function intervalToTf(interval: string | null): Tf | undefined {
               <option [value]="inst.ticker">{{ inst.ticker }} — {{ inst.name }}</option>
             }
           </select>
-          <tui-badge appearance="info">{{ intervalLabel() }}</tui-badge>
+          <span tuiBadge appearance="info">{{ intervalLabel() }}</span>
         </div>
         <div class="tf">
           <button tuiButton size="s" [appearance]="tf() === '15m' ? 'primary' : 'flat'"

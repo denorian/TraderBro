@@ -30,7 +30,7 @@ perimeter, and — only in explicit modes — places orders against the T-Bank *
 | DB | PostgreSQL 17 + TimescaleDB 2.x (docker, host port **25432**) |
 | Migrations | Liquibase YAML (applied by docker-compose `migrate` / `scripts/migrate.sh`, **not** at app startup) |
 | Boilerplate | Lombok (use `@Slf4j`, builders) |
-| UI | Angular 20 + Taiga UI 4 + lightweight-charts (in `ui/`, Jest) |
+| UI | Angular 22 + Taiga UI 5 + lightweight-charts (in `ui/`, Jest) |
 | Quality | SpotBugs + JaCoCo (0.70 line) in `verify`; OWASP on `-P owasp`. **Checkstyle was removed** (2026-10) |
 
 ## Build / test / run

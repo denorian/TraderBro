@@ -26,18 +26,18 @@ import { capLabel as capLabelFn, priceDecimals as priceDecimalsFn, typeLabel as 
     <header class="dash-header">
       <div class="brand">TraderBro</div>
       <div class="badges">
-        <tui-badge [appearance]="status()?.dataStream?.status === 'OK' ? 'success' : 'error'">
+        <span tuiBadge [appearance]="status()?.dataStream?.status === 'OK' ? 'positive' : 'negative'">
           Stream {{ status()?.dataStream?.status ?? '—' }}
-        </tui-badge>
-        <tui-badge [appearance]="status()?.broker?.status === 'OK' ? 'success' : 'error'">
+        </span>
+        <span tuiBadge [appearance]="status()?.broker?.status === 'OK' ? 'positive' : 'negative'">
           Broker {{ status()?.broker?.status ?? '—' }}
-        </tui-badge>
-        <tui-badge [appearance]="status()?.db?.status === 'OK' ? 'success' : 'error'">
+        </span>
+        <span tuiBadge [appearance]="status()?.db?.status === 'OK' ? 'positive' : 'negative'">
           DB {{ status()?.db?.status ?? '—' }}
-        </tui-badge>
-        <tui-badge [appearance]="status()?.killSwitchActive ? 'error' : 'success'">
+        </span>
+        <span tuiBadge [appearance]="status()?.killSwitchActive ? 'negative' : 'positive'">
           {{ status()?.killSwitchActive ? 'KILL-SWITCH' : 'OK' }}
-        </tui-badge>
+        </span>
       </div>
       <div class="pnl">
         <span>P&L дня:</span>
@@ -59,10 +59,10 @@ import { capLabel as capLabelFn, priceDecimals as priceDecimalsFn, typeLabel as 
     </div>
 
     @if (error()) {
-      <tui-notification appearance="error" class="notice">
+      <div tuiNotification appearance="negative" class="notice">
         Ошибка загрузки данных.
         <button tuiButton appearance="flat" size="s" (click)="reload()">Повторить</button>
-      </tui-notification>
+      </div>
     }
 
     <div class="tables">
@@ -98,21 +98,21 @@ import { capLabel as capLabelFn, priceDecimals as priceDecimalsFn, typeLabel as 
                   {{ row.ao | price:2 }}
                 </span>
               </td>
-              <td tuiTd><tui-badge [appearance]="stateAppearance(row.state)">{{ row.state }}</tui-badge></td>
+              <td tuiTd><span tuiBadge [appearance]="stateAppearance(row.state)">{{ row.state }}</span></td>
               <td tuiTd>
                 @if (row.divergence) {
-                  <tui-badge [appearance]="divergenceAppearance(row.divergence)">
+                  <span tuiBadge [appearance]="divergenceAppearance(row.divergence)">
                     {{ divergenceLabel(row.divergence) }}
-                  </tui-badge>
+                  </span>
                 } @else {
                   <span class="muted">—</span>
                 }
               </td>
               <td tuiTd>
                 @if (row.angulationAtr != null) {
-                  <tui-badge [appearance]="row.angulationAtr >= 0.1 ? 'success' : 'neutral'">
+                  <span tuiBadge [appearance]="row.angulationAtr >= 0.1 ? 'positive' : 'neutral'">
                     {{ row.angulationAtr.toFixed(2) }} {{ angDir(row.angulationDir) }}
-                  </tui-badge>
+                  </span>
                 } @else {
                   <span class="muted">—</span>
                 }
@@ -147,9 +147,9 @@ import { capLabel as capLabelFn, priceDecimals as priceDecimalsFn, typeLabel as 
           <ul>
             @for (s of signals().slice(0, 20); track s.id) {
               <li>
-                <tui-badge [appearance]="s.verdict === 'ACCEPTED' ? 'success' : 'warning'">
+                <span tuiBadge [appearance]="s.verdict === 'ACCEPTED' ? 'positive' : 'warning'">
                   {{ s.direction }}
-                </tui-badge>
+                </span>
                 {{ s.strategyId }} {{ instrumentLabel(s.figi, instrMap()) }} · {{ s.price | price }} ({{ s.ts | mskTime }})
               </li>
             } @empty {
@@ -288,7 +288,7 @@ export class DashboardComponent implements OnInit {
   divergenceAppearance(d: DivergenceEventDto): string {
     if (d.status === 'EXPIRED') { return 'neutral'; }
     if (d.status === 'UNCONFIRMED') { return 'warning'; }
-    return d.direction === 'BEARISH' ? 'error' : 'success';
+    return d.direction === 'BEARISH' ? 'negative' : 'positive';
   }
 
   angDir(dir: string | null): string {
@@ -297,8 +297,8 @@ export class DashboardComponent implements OnInit {
 
   stateAppearance(state: string): string {
     switch (state) {
-      case 'EATING_BULL': return 'success';
-      case 'EATING_BEAR': return 'error';
+      case 'EATING_BULL': return 'positive';
+      case 'EATING_BEAR': return 'negative';
       case 'AWAKENING': return 'warning';
       default: return 'neutral';
     }

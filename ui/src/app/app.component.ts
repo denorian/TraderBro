@@ -1,4 +1,4 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { TuiRoot } from '@taiga-ui/core';
@@ -41,6 +41,7 @@ import { TokenService } from './core/token.service';
       <router-outlet></router-outlet>
     </tui-root>
   `,
+  changeDetection: ChangeDetectionStrategy.Eager,
   styles: [`
     .top-nav { display: flex; align-items: center; gap: 1rem; padding: .5rem 1rem;
       border-bottom: 1px solid var(--tui-border-normal); }
