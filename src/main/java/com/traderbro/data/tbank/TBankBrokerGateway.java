@@ -15,23 +15,21 @@ import java.util.List;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import ru.tinkoff.piapi.contract.v1.MoneyValue;
+import ru.tinkoff.piapi.contract.v1.PortfolioPosition;
+import ru.tinkoff.piapi.contract.v1.PortfolioResponse;
 import ru.tinkoff.piapi.contract.v1.Quotation;
-import ru.tinkoff.piapi.contract.v1.Share;
-import ru.tinkoff.piapi.core.InvestApi;
-import ru.tinkoff.piapi.core.models.Money;
-import ru.tinkoff.piapi.core.models.Portfolio;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * {@link BrokerGateway} backed by the T-Bank Invest API (java-sdk-core 1.36). In sandbox mode
- * all order calls are routed to {@link ru.tinkoff.piapi.core.SandboxService}; in live mode to
- * {@link ru.tinkoff.piapi.core.OrdersService}. Account id is a {@code String}.
+ * {@link BrokerGateway} backed by the T-Bank Invest API (java-sdk-core 1.51). Sandbox mode is a
+ * {@code sandbox.enabled} flag on the connection, so all order calls route through
+ * {@link TBankApi} which picks the sandbox/live endpoint. Account id is a {@code String}.
  */
 @Slf4j
 public class TBankBrokerGateway implements BrokerGateway {
 
-    private final InvestApi api;
+    private final TBankApi api;
     private final boolean sandbox;
     private final String configuredAccountId;
     private final int moneyScale;
@@ -42,7 +40,7 @@ public class TBankBrokerGateway implements BrokerGateway {
      * (absent key) so a later successful lookup is still possible. */
     private final Map<String, String[]> instrumentNames = new ConcurrentHashMap<>();
 
-    public TBankBrokerGateway(InvestApi api, boolean sandbox, String accountId, int moneyScale) {
+    public TBankBrokerGateway(TBankApi api, boolean sandbox, String accountId, int moneyScale) {
         this.api = api;
         this.sandbox = sandbox;
         this.configuredAccountId = accountId;
@@ -59,7 +57,7 @@ public class TBankBrokerGateway implements BrokerGateway {
             return resolvedAccountId;
         }
         if (sandbox) {
-            resolvedAccountId = api.getSandboxService().openAccountSync();
+            resolvedAccountId = api.openAccountSync();
             log.info("opened sandbox account id={}", resolvedAccountId);
             return resolvedAccountId;
         }
@@ -74,44 +72,33 @@ public class TBankBrokerGateway implements BrokerGateway {
                         : ru.tinkoff.piapi.contract.v1.OrderDirection.ORDER_DIRECTION_SELL;
         Quotation price = req.getLimitPrice() == null ? Quotation.getDefaultInstance()
                 : toQuotation(req.getLimitPrice());
-        ru.tinkoff.piapi.contract.v1.PostOrderResponse resp;
-        if (sandbox) {
-            resp = api.getSandboxService().postOrderSync(req.getFigi(), req.getLots(), price,
-                    direction, accountId(), toSdkType(req.getType()), req.getClientOrderId());
-        } else {
-            resp = api.getOrdersService().postOrderSync(req.getFigi(), req.getLots(), price,
-                    direction, accountId(), toSdkType(req.getType()), req.getClientOrderId());
-        }
+        ru.tinkoff.piapi.contract.v1.PostOrderResponse resp = api.postOrderSync(
+                req.getFigi(), req.getLots(), price, direction, accountId(),
+                toSdkType(req.getType()), req.getClientOrderId());
         return new BrokerGateway.OrderResponse(resp.getOrderId(),
                 resp.getExecutionReportStatus().name(), null);
     }
 
     @Override
     public void cancelOrder(String brokerOrderId) {
-        if (sandbox) {
-            api.getSandboxService().cancelOrderSync(accountId(), brokerOrderId);
-        } else {
-            api.getOrdersService().cancelOrderSync(accountId(), brokerOrderId);
-        }
+        api.cancelOrderSync(accountId(), brokerOrderId);
     }
 
     @Override
     public List<Position> getPositions() {
-        Portfolio portfolio = sandbox
-                ? Portfolio.fromResponse(api.getSandboxService().getPortfolioSync(accountId()))
-                : api.getOperationsService().getPortfolioSync(accountId());
+        PortfolioResponse portfolio = api.getPortfolioSync(accountId());
         List<Position> out = new ArrayList<>();
-        for (ru.tinkoff.piapi.core.models.Position p : portfolio.getPositions()) {
-            long shares = p.getQuantity().abs().longValue();
+        for (PortfolioPosition p : portfolio.getPositionsList()) {
+            long shares = Math.abs(p.getQuantity().getUnits());
             if (shares == 0) {
                 continue;
             }
             out.add(Position.builder()
                     .figi(p.getFigi())
-                    .lots(p.getQuantityLots().abs().longValue())
+                    .lots(Math.abs(p.getQuantityLots().getUnits()))
                     .shares(shares)
-                    .averagePrice(money(p.getAveragePositionPrice()))
-                    .currentPrice(money(p.getCurrentPrice()))
+                    .averagePrice(fromMoney(p.getAveragePositionPrice()))
+                    .currentPrice(fromMoney(p.getCurrentPrice()))
                     .ticker(tickerOf(p.getFigi()))
                     .name(nameOf(p.getFigi()))
                     .build());
@@ -127,7 +114,7 @@ public class TBankBrokerGateway implements BrokerGateway {
             return cached;
         }
         try {
-            var sec = api.getInstrumentsService().getInstrumentByFigiSync(figi);
+            var sec = api.getInstrumentByFigiSync(figi);
             String[] names = { sec.getTicker(), sec.getName() };
             instrumentNames.put(figi, names);
             return names;
@@ -149,9 +136,7 @@ public class TBankBrokerGateway implements BrokerGateway {
 
     @Override
     public List<OrderState> getOpenOrders() {
-        List<ru.tinkoff.piapi.contract.v1.OrderState> states = sandbox
-                ? api.getSandboxService().getOrdersSync(accountId())
-                : api.getOrdersService().getOrdersSync(accountId());
+        List<ru.tinkoff.piapi.contract.v1.OrderState> states = api.getOrdersSync(accountId());
         List<OrderState> out = new ArrayList<>();
         for (ru.tinkoff.piapi.contract.v1.OrderState s : states) {
             out.add(OrderState.builder()
@@ -175,7 +160,7 @@ public class TBankBrokerGateway implements BrokerGateway {
                 .setUnits(amount.longValue())
                 .setNano(amount.remainder(BigDecimal.ONE).movePointRight(9).intValue())
                 .build();
-        api.getSandboxService().payInSync(accountId(), mv);
+        api.payInSync(accountId(), mv);
         return true;
     }
 
@@ -183,12 +168,12 @@ public class TBankBrokerGateway implements BrokerGateway {
     public Optional<Instrument> instrumentByFigi(String figi) {
         com.traderbro.data.mapper.SdkInstrumentMapper m =
                 new com.traderbro.data.mapper.SdkInstrumentMapper(moneyScale);
-        ru.tinkoff.piapi.contract.v1.Share s = api.getInstrumentsService().getShareByFigiSync(figi);
+        ru.tinkoff.piapi.contract.v1.Share s = api.getShareByFigiSync(figi);
         if (s.getFigi() != null && !s.getFigi().isBlank()) {
             return Optional.of(m.toInstrument(s));
         }
         // Not a share — fall back to futures so the execution path can resolve a futures FIGI.
-        ru.tinkoff.piapi.contract.v1.Future f = api.getInstrumentsService().getFutureByFigiSync(figi);
+        ru.tinkoff.piapi.contract.v1.Future f = api.getFutureByFigiSync(figi);
         if (f.getFigi() != null && !f.getFigi().isBlank()) {
             return Optional.of(m.toInstrument(f));
         }
@@ -200,17 +185,6 @@ public class TBankBrokerGateway implements BrokerGateway {
             return BigDecimal.ZERO;
         }
         return QuotationMapper.toBigDecimal(m, moneyScale);
-    }
-
-    private BigDecimal money(Money m) {
-        return m == null ? BigDecimal.ZERO : m.getValue();
-    }
-
-    private BigDecimal fromQuotation(Quotation q) {
-        if (q == null || (q.getUnits() == 0 && q.getNano() == 0)) {
-            return BigDecimal.ZERO;
-        }
-        return QuotationMapper.toBigDecimal(q, moneyScale);
     }
 
     private static Quotation toQuotation(BigDecimal v) {

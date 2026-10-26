@@ -48,7 +48,7 @@ import com.traderbro.data.mapper.SdkBarMapper;
 import com.traderbro.data.mapper.SdkInstrumentMapper;
 import com.traderbro.data.tbank.HistoryLoadConfig;
 import com.traderbro.data.tbank.HistoryLoader;
-import com.traderbro.data.tbank.RetryPolicy;
+import com.traderbro.data.tbank.TBankApi;
 import com.traderbro.data.tbank.TBankBrokerGateway;
 import com.traderbro.data.tbank.TBankMarketDataProvider;
 import com.traderbro.data.tbank.ApiRateLimiter;
@@ -89,7 +89,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import ru.tinkoff.piapi.core.InvestApi;
 
 /**
  * Composition root: wires the domain, data, execution and scheduler beans together and
@@ -106,7 +105,7 @@ public class ApplicationConfig {
 
     // ------------------------------------------------------------------ T-Bank SDK
     @Bean
-    public InvestApi investApi(AppProperties app, TBankProperties tbank) {
+    public TBankApi tbankApi(AppProperties app, TBankProperties tbank) {
         String token = System.getenv(tbank.getTokenEnv());
         if (token == null || token.isBlank()) {
             throw new IllegalStateException("Missing API token in env " + tbank.getTokenEnv());
@@ -115,8 +114,7 @@ public class ApplicationConfig {
             throw new IllegalStateException(
                     "Live trading requires TRADING_LIVE_ACK=I_UNDERSTAND_RISK in env");
         }
-        // TODO: verify SDK factory API and target-endpoint override on the pinned version.
-        return app.isSandbox() ? InvestApi.createSandbox(token) : InvestApi.create(token);
+        return new TBankApi(token, app.isSandbox(), tbank.getRetry().getMaxAttempts(), tbank.getTarget());
     }
 
     @Bean
@@ -130,27 +128,20 @@ public class ApplicationConfig {
     }
 
     @Bean
-    public RetryPolicy retryPolicy(TBankProperties tbank) {
-        return new RetryPolicy(tbank.getRetry().getMaxAttempts(),
-                tbank.getRetry().getInitialBackoff(), tbank.getTimeout());
-    }
-
-    @Bean
     @Primary
-    public MarketDataProvider marketDataProvider(InvestApi api, SdkBarMapper barMapper,
-                                                 SdkInstrumentMapper instMapper, AppProperties app,
-                                                 RetryPolicy retryPolicy, TBankProperties tbank) {
-        return new TBankMarketDataProvider(api, barMapper, instMapper, 500, retryPolicy,
+    public MarketDataProvider marketDataProvider(TBankApi api, SdkBarMapper barMapper,
+                                                 SdkInstrumentMapper instMapper, TBankProperties tbank) {
+        return new TBankMarketDataProvider(api, barMapper, instMapper, 500,
                 new ApiRateLimiter(tbank.getRateLimitPerMin()));
     }
 
     @Bean
-    public BrokerGateway brokerGateway(InvestApi api, AppProperties app) {
+    public BrokerGateway brokerGateway(TBankApi api, AppProperties app) {
         return new TBankBrokerGateway(api, app.isSandbox(), app.getAccountId(), app.getMoneyScale());
     }
 
     @Bean
-    public OrderEventSource orderEventSource(InvestApi api, AppProperties app) {
+    public OrderEventSource orderEventSource(TBankApi api, AppProperties app) {
         return new TBankOrderEventSource(api, app.getMoneyScale());
     }
 

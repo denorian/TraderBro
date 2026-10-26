@@ -37,10 +37,7 @@
         <telegrambots.version>10.3.0</telegrambots.version>
 
         <!-- T-Bank Invest API Java SDK -->
-        <!-- Pinned at 1.36: 1.51+ restructures the API (ru.tinkoff.piapi.core.* removed),
-             requiring a migration of TBankBrokerGateway / TBankMarketDataProvider /
-             TBankOrderEventSource. Bump only together with that refactor. -->
-        <tinkoff-invest.version>1.36</tinkoff-invest.version>
+        <tinkoff-invest.version>1.51</tinkoff-invest.version>
         <logstash-logback.version>9.0</logstash-logback.version>
 
         <!-- Boilerplate -->
