@@ -39,7 +39,7 @@ crypto:
   history:
     load-on-startup: ${CRYPTO_HISTORY_LOAD_ON_STARTUP:true}
     days-daily: 1095
-    days-intraday: 90
+    days-intraday: 180
     days-hourly: 400
   taker-fee-pct: 0.1
   slippage-bps: 5

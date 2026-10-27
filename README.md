@@ -229,7 +229,7 @@ Key stage-3.6 additions (`crypto.*`):
 | `crypto.binance.rate-limit-weight-per-min` | client-side weight limiter (1100/min, mirrors Binance) |
 | `crypto.pairs` | spot pairs tracked (BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT) |
 | `crypto.timeframes` | streamed/backfilled timeframes (15m, 1h, 4h, 1d) |
-| `crypto.history.{load-on-startup,days-daily,days-hourly,days-intraday}` | incremental history backfill window (3y daily, 400d hourly, 90d intraday) |
+| `crypto.history.{load-on-startup,days-daily,days-hourly,days-intraday}` | incremental history backfill window (3y daily, 400d hourly, 180d intraday) |
 | `crypto.taker-fee-pct` / `crypto.slippage-bps` | costs used when backtesting crypto (0.1% / 5bps) |
 | `crypto.coingecko.{enabled,base-url}` | daily market-cap/rank enrichment |
 
