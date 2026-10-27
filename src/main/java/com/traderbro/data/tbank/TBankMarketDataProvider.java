@@ -81,8 +81,14 @@ public class TBankMarketDataProvider implements MarketDataProvider {
         for (String figi : figis) {
             instruments.add(new ru.ttech.piapi.core.impl.marketdata.subscription.Instrument(figi, sdkInterval));
         }
-        manager.subscribeCandles(instruments, new CandleSubscriptionSpec(), candle ->
-                sub.onBar.accept(barMapper.toBar(candle.getOriginal(), sub.interval)));
+        // waitingClose=false so in-progress candles keep the stream "live" during trading hours
+        // (with the default true, only closed candles arrive — a 15-min gap that trips the
+        // staleness monitor). Only final bars are persisted downstream.
+        manager.subscribeCandles(instruments,
+                new CandleSubscriptionSpec(
+                        ru.tinkoff.piapi.contract.v1.GetCandlesRequest.CandleSource.CANDLE_SOURCE_INCLUDE_WEEKEND,
+                        false),
+                candle -> sub.onBar.accept(barMapper.toBar(candle.getOriginal(), sub.interval)));
         sub.markConnected();
         log.info("Subscribed candles for {} at {}", figis, interval);
         return sub;

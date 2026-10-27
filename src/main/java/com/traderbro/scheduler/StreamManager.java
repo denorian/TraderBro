@@ -95,8 +95,10 @@ public class StreamManager {
                     NotificationLevel.INFO, Map.of("lag", health.lag().getSeconds())));
         }
         try {
-            barStore.upsert(List.of(bar));
+            // Persist and process only closed candles; in-progress ones only keep the stream
+            // "live" (markData above) and never touch the bars table or signal engine.
             if (bar.isFinal_()) {
+                barStore.upsert(List.of(bar));
                 signalEngine.onClosedBar(bar);
                 snapshotService.onClosedBar(bar);
             }

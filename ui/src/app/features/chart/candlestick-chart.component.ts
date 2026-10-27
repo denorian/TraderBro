@@ -16,6 +16,7 @@ import {
   HistogramSeries,
   IChartApi,
   ISeriesApi,
+  ISeriesMarkersPluginApi,
   LineSeries,
   SeriesMarker,
   Time,
@@ -115,6 +116,8 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
    *  newly arriving data extends history further left and warrants a fresh fitContent. */
   private lastFitFrom = Infinity;
   private lastBarIndex = -1;
+  /** Handle to the candle series' markers, updated on pan/zoom so only visible signals show. */
+  private markersHandle: ISeriesMarkersPluginApi<Time> | null = null;
   private readonly mainSeries: ISeriesApi<any>[] = [];
   private readonly aoSeries: ISeriesApi<any>[] = [];
 
@@ -165,6 +168,11 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
         this.loadOlder.emit();
       }
       prevFrom = from;
+      // Show only the signals/divergences that fall inside the newly visible time range.
+      const figi = this._data?.figi;
+      if (figi) {
+        this.markersHandle?.setMarkers(this.clipToVisible(this.allMarkers(figi)));
+      }
     });
   }
 
@@ -230,10 +238,8 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
     this.mainSeries.push(candle, jaw, teeth, lips);
     this.aoSeries.push(hist);
 
-    const markers = [...this.applyMarkers(candle, data.figi), ...this.divergenceMarkers(data.figi)];
-    if (markers.length) {
-      createSeriesMarkers(candle, markers);
-    }
+    const markers = this.clipToVisible(this.allMarkers(data.figi));
+    this.markersHandle = createSeriesMarkers(candle, markers);
     this.applyAoLine(data.figi);
 
     // Refit whenever a new instrument appears OR the incoming data reaches further back than
@@ -252,7 +258,31 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private applyMarkers(candle: ISeriesApi<any>, figi: string): SeriesMarker<Time>[] {
+  /** All signal + divergence markers for the current instrument/selection, sorted by time. */
+  private allMarkers(figi: string): SeriesMarker<Time>[] {
+    const markers = [...this.applyMarkers(figi), ...this.divergenceMarkers(figi)];
+    markers.sort((a, b) => (a.time as number) - (b.time as number));
+    return markers;
+  }
+
+  /** Keeps only markers whose time falls inside the currently visible range. */
+  private clipToVisible(markers: SeriesMarker<Time>[]): SeriesMarker<Time>[] {
+    if (!this.chart || !markers.length) {
+      return markers;
+    }
+    const range = this.chart.timeScale().getVisibleRange();
+    if (!range) {
+      return markers;
+    }
+    const from = range.from as number;
+    const to = range.to as number;
+    return markers.filter((m) => {
+      const t = m.time as number;
+      return t >= from && t <= to;
+    });
+  }
+
+  private applyMarkers(figi: string): SeriesMarker<Time>[] {
     const markers: SeriesMarker<Time>[] = [];
     for (const s of this.signals) {
       if (s.figi && s.figi !== figi) {
@@ -279,10 +309,6 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
         shape,
         text: s.type === 'ENTRY' ? 'Buy' : 'Sell'
       });
-    }
-    if (markers.length > 500) {
-      console.warn(`[chart] ${markers.length} markers exceed the 500 sanity cap; trimming.`);
-      markers.length = 500;
     }
     return markers;
   }
