@@ -1,9 +1,11 @@
 package com.traderbro.core.risk;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import lombok.Value;
 
@@ -42,4 +44,33 @@ public class RiskConfig {
     BigDecimal futuresMarginLimitPct;
     /** No new futures positions within this many days before expiry. */
     int noNewPositionsDaysBeforeExpiry;
+
+    /**
+     * True while the exchange is (expected to be) trading in the configured zone: a weekday and
+     * the local time within the main trading window or any futures window. Outside trading hours
+     * a live candle stream legitimately delivers no data, so staleness checks must not treat that
+     * as data loss.
+     */
+    public boolean isInSession(ZonedDateTime now) {
+        if (!allowWeekendTrading) {
+            DayOfWeek dow = now.getDayOfWeek();
+            if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+                return false;
+            }
+        }
+        LocalTime t = now.toLocalTime();
+        if (within(t, tradingWindowStart, tradingWindowEnd)) {
+            return true;
+        }
+        for (TradingWindow window : futuresTradingWindows) {
+            if (window.contains(t)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean within(LocalTime t, LocalTime start, LocalTime end) {
+        return !t.isBefore(start) && t.isBefore(end);
+    }
 }

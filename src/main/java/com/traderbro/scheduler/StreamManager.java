@@ -12,6 +12,7 @@ import com.traderbro.core.event.NotificationType;
 import com.traderbro.core.event.TraderEvent;
 import com.traderbro.core.event.TraderEventPublisher;
 import com.traderbro.core.indicators.IndicatorSnapshotService;
+import com.traderbro.core.risk.RiskConfig;
 import com.traderbro.execution.killswitch.KillSwitch;
 import com.traderbro.storage.InstrumentRepository;
 import java.time.Duration;
@@ -36,7 +37,7 @@ public class StreamManager {
     private final IndicatorSnapshotService snapshotService;
     private final KillSwitch killSwitch;
     private final CandleInterval workingInterval;
-    private final Duration staleThreshold;
+    private final RiskConfig riskConfig;
     private final Consumer<String> auditSink;
     private final StreamHealth health;
     private final TraderEventPublisher publisher;
@@ -48,7 +49,7 @@ public class StreamManager {
     public StreamManager(MarketDataProvider marketData, BarStore barStore,
                          InstrumentRepository instrumentRepository, SignalEngine signalEngine,
                          IndicatorSnapshotService snapshotService, KillSwitch killSwitch,
-                         CandleInterval workingInterval, Duration staleThreshold,
+                         CandleInterval workingInterval, RiskConfig riskConfig,
                          Consumer<String> auditSink, StreamHealth health,
                          TraderEventPublisher publisher) {
         this.marketData = marketData;
@@ -58,7 +59,7 @@ public class StreamManager {
         this.snapshotService = snapshotService;
         this.killSwitch = killSwitch;
         this.workingInterval = workingInterval;
-        this.staleThreshold = staleThreshold;
+        this.riskConfig = riskConfig;
         this.auditSink = auditSink;
         this.health = health;
         this.publisher = publisher;
@@ -111,15 +112,21 @@ public class StreamManager {
         if (!started) {
             return;
         }
+        // Outside the trading session a candle stream legitimately delivers no data (market
+        // closed, weekend); a gap then is not data loss, so do not raise the kill-switch.
+        if (!riskConfig.isInSession(java.time.ZonedDateTime.now(riskConfig.getTradingZone()))) {
+            return;
+        }
         Duration lag = health.lag();
-        if (lag.compareTo(staleThreshold) > 0) {
+        if (lag.compareTo(riskConfig.getMaxStreamLag()) > 0) {
             if (!wasDown) {
                 wasDown = true;
                 publisher.publish(TraderEvent.of(NotificationType.DATA_STREAM_DOWN,
                         NotificationLevel.CRITICAL, Map.of("lag", lag.getSeconds())));
             }
             if (!killSwitch.isActive()) {
-                String msg = "stream data stale for " + lag + " (>" + staleThreshold + "); killing switch";
+                String msg = "stream data stale for " + lag + " (>"
+                        + riskConfig.getMaxStreamLag() + "); killing switch";
                 auditSink.accept(msg);
                 log.error(msg);
                 killSwitch.activate("stream data loss: " + lag);

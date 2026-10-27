@@ -366,11 +366,11 @@ public class ApplicationConfig {
     public StreamManager streamManager(MarketDataProvider marketData, BarStore barStore,
                                        InstrumentRepository instruments, SignalEngine engine,
                                        IndicatorSnapshotService snapshotService,
-                                       KillSwitch killSwitch, AppProperties app,
-                                       RiskProperties risk, Consumer<String> auditSink,
+                                       KillSwitch killSwitch,
+                                       RiskConfig riskConfig, Consumer<String> auditSink,
                                        StreamHealth health, TraderEventPublisher publisher) {
         return new StreamManager(marketData, barStore, instruments, engine, snapshotService,
-                killSwitch, CandleInterval.FIFTEEN_MIN, risk.getMaxStreamLag(),
+                killSwitch, CandleInterval.FIFTEEN_MIN, riskConfig,
                 auditSink, health, publisher);
     }
 
