@@ -26,7 +26,7 @@ reports/
 *.local.yaml
 
 # Secrets — never commit env files
-.env
+prod.env
 .env.*
 
 # OS
