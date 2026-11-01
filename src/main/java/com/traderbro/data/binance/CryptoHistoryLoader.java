@@ -11,17 +11,17 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
 
 /**
  * Startup backfill for crypto bars. Always resolves and persists the tracked spot pairs into the
  * {@code instruments} table (so they show up in the UI and are backtestable), then, when
  * {@code crypto.history.load-on-startup=true}, loads 3 years of daily + {@code days-intraday} of
  * 15-minute candles. Inserts are idempotent via {@link BarStore} and incremental via
- * {@link BarStore#latestTs}.
+ * {@link BarStore#latestTs}. Invoked by {@code HistoryBackfillRunner} in parallel with the T-Bank
+ * backfill so the two providers don't block each other at startup.
  */
 @Slf4j
-public class CryptoHistoryLoader implements CommandLineRunner {
+public class CryptoHistoryLoader {
 
     private final MarketDataProvider marketData;
     private final BarStore barStore;
@@ -36,8 +36,8 @@ public class CryptoHistoryLoader implements CommandLineRunner {
         this.props = props;
     }
 
-    @Override
-    public void run(String... args) {
+    /** Backfills Binance history; no-op unless {@code crypto.enabled} (bean absent otherwise). */
+    public void backfill() {
         if (!props.isEnabled()) {
             log.info("crypto disabled (crypto.enabled=false)");
             return;

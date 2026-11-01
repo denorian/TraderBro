@@ -266,6 +266,21 @@
                 <version>${maven-surefire-plugin.version}</version>
             </plugin>
             <plugin>
+                <!-- Runs *IT integration tests (Testcontainers) in the verify phase. Previously the
+                     only IT (BarRepositoryIT) was never executed because surefire excludes *IT. -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${maven-surefire-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>${jacoco.version}</version>
@@ -345,8 +360,10 @@
                                 <id>install-node-and-npm</id>
                                 <goals><goal>install-node-and-npm</goal></goals>
                                 <configuration>
-                                    <!-- Node LTS (check for a newer LTS on releases before bumping). -->
-                                    <nodeVersion>v22.11.0</nodeVersion>
+                                    <!-- Node LTS. Angular 22 CLI requires Node >= v22.22.3 / v24.15.0 / v26.0.0;
+                                         the previous v22.11.0 pin broke the prod UI build. Check for a newer
+                                         LTS on releases before bumping. -->
+                                    <nodeVersion>v24.15.0</nodeVersion>
                                     <npmVersion>10.9.0</npmVersion>
                                 </configuration>
                             </execution>

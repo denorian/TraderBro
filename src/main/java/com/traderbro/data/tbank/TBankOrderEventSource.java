@@ -5,6 +5,8 @@ import com.traderbro.core.domain.spi.OrderEventSource;
 import com.traderbro.core.domain.spi.OrderFillEvent;
 import com.traderbro.data.mapper.QuotationMapper;
 import java.math.BigDecimal;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +29,9 @@ public class TBankOrderEventSource implements OrderEventSource {
     private final TBankApi api;
     private final int moneyScale;
     private final AtomicReference<Consumer<OrderFillEvent>> listener = new AtomicReference<>();
+    /** Cumulative filled lots per broker order id, so partial fills across stream messages
+     * accumulate and OrderManager can detect a final FILLED (filled >= requested). */
+    private final Map<String, Long> cumulativeFilled = new ConcurrentHashMap<>();
 
     public TBankOrderEventSource(TBankApi api, int moneyScale) {
         this.api = api;
@@ -60,10 +65,13 @@ public class TBankOrderEventSource implements OrderEventSource {
         for (OrderTrade t : orderTrades.getTradesList()) {
             BigDecimal price = QuotationMapper.toBigDecimal(t.getPrice(), moneyScale);
             long qty = t.getQuantity();
+            long cumulative = cumulativeFilled.merge(orderId, qty, Long::sum);
             Consumer<OrderFillEvent> cb = listener.get();
             if (cb != null) {
-                cb.accept(new OrderFillEvent(orderId, qty, price,
-                        OrderStatus.PARTIALLY_FILLED, qty));
+                // Status is set here only as a hint; OrderManager decides FILLED vs PARTIALLY_FILLED
+                // by comparing cumulative filled lots against the requested lots it knows locally.
+                cb.accept(new OrderFillEvent(orderId, cumulative, price,
+                        OrderStatus.PARTIALLY_FILLED, 0));
             }
         }
     }

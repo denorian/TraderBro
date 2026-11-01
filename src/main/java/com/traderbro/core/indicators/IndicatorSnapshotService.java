@@ -175,6 +175,7 @@ public class IndicatorSnapshotService {
         Map<String, Object> values = new LinkedHashMap<>();
         angulationDetector.angleAt(barSeriesOf(alligator), alligator, atr, i, tf).ifPresent(a -> {
             values.put("angle_atr", round2(a.angleAtr()));
+            values.put("angle_deg", round2(a.angleDeg()));
             values.put("direction", a.direction().name());
         });
         return snapshot(figi, tf, bar, IndicatorSnapshot.IndicatorKind.ANGULATION, values);

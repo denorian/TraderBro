@@ -27,6 +27,9 @@ public class AngulationEvent {
     double jawSlopeAtr;
     /** {@code |priceSlope - jawSlope|} in ATR per bar. */
     double angleAtr;
+    /** Geometric angle between the price and Jaw lines in degrees ({@code atan} of the
+     * ATR-normalised slope difference). Maps to the practitioner's ">45°, closer to 90°". */
+    double angleDeg;
     Instant anchorTs;
     int barsInWindow;
     Instant createdAt;

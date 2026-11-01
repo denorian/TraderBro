@@ -35,6 +35,9 @@ import { capLabel as capLabelFn, priceDecimals as priceDecimalsFn, typeLabel as 
         <span tuiBadge [appearance]="status()?.db?.status === 'OK' ? 'positive' : 'negative'">
           DB {{ status()?.db?.status ?? '—' }}
         </span>
+        <span tuiBadge [appearance]="status()?.cryptoStream?.status === 'OK' ? 'positive' : 'negative'">
+          Crypto {{ status()?.cryptoStream?.status ?? '—' }}
+        </span>
         <span tuiBadge [appearance]="status()?.killSwitchActive ? 'negative' : 'positive'">
           {{ status()?.killSwitchActive ? 'KILL-SWITCH' : 'OK' }}
         </span>
@@ -109,9 +112,9 @@ import { capLabel as capLabelFn, priceDecimals as priceDecimalsFn, typeLabel as 
                 }
               </td>
               <td tuiTd>
-                @if (row.angulationAtr != null) {
-                  <span tuiBadge [appearance]="row.angulationAtr >= 0.1 ? 'positive' : 'neutral'">
-                    {{ row.angulationAtr.toFixed(2) }} {{ angDir(row.angulationDir) }}
+                @if (row.angulationDeg != null) {
+                  <span tuiBadge [appearance]="row.angulationDeg >= 45 ? 'positive' : 'neutral'">
+                    {{ row.angulationDeg.toFixed(0) }}° {{ angDir(row.angulationDir) }}
                   </span>
                 } @else {
                   <span class="muted">—</span>
@@ -273,6 +276,7 @@ export class DashboardComponent implements OnInit {
         state: String(all['state'] ?? 'SLEEPING'),
         divergence: divByFigi.get(inst.figi) ?? null,
         angulationAtr: snap?.angulationAngleAtr ?? null,
+        angulationDeg: snap?.angulationAngleDeg ?? null,
         angulationDir: snap?.angulationDirection ?? null
       };
     });
@@ -320,5 +324,6 @@ interface Row {
   state: string;
   divergence: DivergenceEventDto | null;
   angulationAtr: number | null;
+  angulationDeg: number | null;
   angulationDir: string | null;
 }

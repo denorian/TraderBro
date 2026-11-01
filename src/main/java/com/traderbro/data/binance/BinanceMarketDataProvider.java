@@ -17,6 +17,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -48,9 +51,18 @@ public class BinanceMarketDataProvider implements MarketDataProvider {
     private final HttpClient http;
     private final BinanceRateLimiter rateLimiter;
     private final BinanceInstrumentMapper instrumentMapper = new BinanceInstrumentMapper();
+    /** Dedicated daemon executor for WebSocket reconnect backoff, so a reconnect sleep never
+     * blocks the HttpClient's shared callback/executor threads (shared with REST calls). */
+    private final ScheduledExecutorService reconnectScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "binance-ws-reconnect");
+        t.setDaemon(true);
+        return t;
+    });
 
-    // Exchange-info cache (symbols are static); refreshed at most once an hour.
+    // Exchange-info cache (symbols are static); refreshed at most once an hour. Keyed by the
+    // requested symbol set so a resolve for one pair list can't be served for another.
     private volatile List<Instrument> cachedInstruments = List.of();
+    private volatile List<String> cachedSymbols = List.of();
     private volatile long cacheTimestampMs = 0;
 
     public BinanceMarketDataProvider(CryptoProperties props) {
@@ -158,14 +170,15 @@ public class BinanceMarketDataProvider implements MarketDataProvider {
                     .buildAsync(URI.create(url), sub.listener())
                     .join();
             sub.attach(ws);
+            sub.onConnected();
             log.info("binance stream connected: {}", streams);
         } catch (RuntimeException e) {
             log.warn("binance stream connect failed (attempt {}): {}", attempt + 1, e.getMessage());
-            reconnect(sub, streams, attempt);
+            scheduleReconnect(sub, streams, attempt);
         }
     }
 
-    private void reconnect(BinanceStreamSubscription sub, String streams, int attempt) {
+    private void scheduleReconnect(BinanceStreamSubscription sub, String streams, int attempt) {
         if (sub.isCancelled()) {
             return;
         }
@@ -176,13 +189,13 @@ public class BinanceMarketDataProvider implements MarketDataProvider {
         }
         long backoff = 1000L * (1L << attempt);
         log.warn("binance stream {} reconnect in {} ms", streams, backoff);
-        try {
-            Thread.sleep(backoff);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return;
-        }
-        connect(sub, streams, attempt + 1);
+        // Reconnect on the dedicated daemon executor, not on the HttpClient callback thread
+        // (which is shared with REST calls and must not be blocked by a backoff sleep).
+        reconnectScheduler.schedule(() -> {
+            if (!sub.isCancelled()) {
+                connect(sub, streams, attempt + 1);
+            }
+        }, backoff, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -238,7 +251,9 @@ public class BinanceMarketDataProvider implements MarketDataProvider {
             return List.of();
         }
         long now = System.currentTimeMillis();
-        if (now - cacheTimestampMs < EXCHANGE_CACHE_MS && !cachedInstruments.isEmpty()) {
+        List<String> sorted = tickers.stream().sorted().toList();
+        if (now - cacheTimestampMs < EXCHANGE_CACHE_MS
+                && sorted.equals(cachedSymbols) && !cachedInstruments.isEmpty()) {
             return cachedInstruments;
         }
         String symbols = tickers.stream()
@@ -254,6 +269,7 @@ public class BinanceMarketDataProvider implements MarketDataProvider {
         }
         if (!out.isEmpty()) {
             cachedInstruments = out;
+            cachedSymbols = sorted;
             cacheTimestampMs = now;
         }
         return out;
@@ -371,7 +387,7 @@ public class BinanceMarketDataProvider implements MarketDataProvider {
                                 .map(f -> f.toLowerCase(java.util.Locale.ROOT) + "@kline_"
                                         + intervalToBinance(interval))
                                 .collect(Collectors.joining("/"));
-                        reconnect(BinanceStreamSubscription.this, streams, activeAttempt.getAndIncrement());
+                        scheduleReconnect(BinanceStreamSubscription.this, streams, activeAttempt.getAndIncrement());
                     }
                     return null;
                 }
@@ -383,7 +399,7 @@ public class BinanceMarketDataProvider implements MarketDataProvider {
                                 .map(f -> f.toLowerCase(java.util.Locale.ROOT) + "@kline_"
                                         + intervalToBinance(interval))
                                 .collect(Collectors.joining("/"));
-                        reconnect(BinanceStreamSubscription.this, streams, activeAttempt.getAndIncrement());
+                        scheduleReconnect(BinanceStreamSubscription.this, streams, activeAttempt.getAndIncrement());
                     }
                 }
             };
@@ -393,8 +409,19 @@ public class BinanceMarketDataProvider implements MarketDataProvider {
             this.ws = ws;
         }
 
+        /** Called on every successful (re)connect: resets the failure counter so a healthy stream
+         * that later drops again still gets its full reconnect budget. */
+        void onConnected() {
+            activeAttempt.set(0);
+        }
+
         void markDegraded() {
             degraded.set(true);
+        }
+
+        @Override
+        public boolean isDegraded() {
+            return degraded.get();
         }
 
         @Override

@@ -124,6 +124,8 @@ public class AlligatorAoStrategy extends AbstractTradingStrategy {
         Params p = params(params);
         AlligatorIndicator all = alligator(series, p);
         AwesomeOscillatorIndicator ao = new AwesomeOscillatorIndicator(series, p.fast(), p.slow());
+        FractalIndicator fractalLow = new FractalIndicator(series, FractalIndicator.Type.LOW,
+                p.stopLookback());
         if (!all.isReady(last) || !SeriesFactory.isPresent(ao, last)) {
             return Optional.empty();
         }
@@ -166,6 +168,11 @@ public class AlligatorAoStrategy extends AbstractTradingStrategy {
         snap.put("teeth", num(all.teethRaw(last)));
         snap.put("lips", num(all.lipsRaw(last)));
         snap.put("fan_width", all.fanWidth(last));
+        // Stop behind the trailing fractal extremum (long entries only); the build() exit rule
+        // `stopLong` mirrors this same level. Shorts have no explicit stop (teeth/ao-saucer exits).
+        if (direction == Direction.LONG) {
+            snap.put("stop", num(fractalLow.getValue(last)));
+        }
         return Optional.of(newEntrySignal(series, direction, filter, snap));
     }
 

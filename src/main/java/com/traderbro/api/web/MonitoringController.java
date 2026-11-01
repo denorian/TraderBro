@@ -30,6 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class MonitoringController {
 
     private final StreamHealth streamHealth;
+    @org.springframework.beans.factory.annotation.Qualifier("cryptoStreamHealth")
+    private final StreamHealth cryptoStreamHealth;
     private final BrokerGateway gateway;
     private final KillSwitch killSwitch;
     private final PortfolioProvider portfolioProvider;
@@ -42,6 +44,7 @@ public class MonitoringController {
             ComponentStatusDto dataStream,
             ComponentStatusDto broker,
             ComponentStatusDto db,
+            ComponentStatusDto cryptoStream,
             boolean killSwitchActive,
             String killSwitchReason,
             List<com.traderbro.core.domain.Position> positions,
@@ -58,7 +61,10 @@ public class MonitoringController {
                 : new ComponentStatusDto(ComponentStatus.DOWN, "lag=" + lag);
         ComponentStatusDto brokerStatus = new ComponentStatusDto(ComponentStatus.OK, "gateway up");
         ComponentStatusDto dbStatus = new ComponentStatusDto(ComponentStatus.OK, "ok");
-        return new StatusResponse(stream, brokerStatus, dbStatus, killSwitch.isActive(),
+        ComponentStatusDto cryptoStatus = cryptoStreamHealth.isDegraded()
+                ? new ComponentStatusDto(ComponentStatus.DEGRADED, "reconnect budget exhausted")
+                : new ComponentStatusDto(ComponentStatus.OK, "ok");
+        return new StatusResponse(stream, brokerStatus, dbStatus, cryptoStatus, killSwitch.isActive(),
                 killSwitch.reason(), gateway.getPositions(), portfolioProvider.snapshot(), lag);
     }
 

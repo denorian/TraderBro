@@ -39,7 +39,6 @@ public class TBankMarketDataProvider implements MarketDataProvider {
     private final SdkInstrumentMapper instrumentMapper;
     private final int historyMaxCandles;
     private final ApiRateLimiter rateLimiter;
-    private final AtomicBoolean degraded = new AtomicBoolean(false);
     private final ExecutorService streamExecutor;
     private volatile MarketDataStreamManager streamManager;
     private final List<StreamSubscriptionImpl> subscriptions = new ArrayList<>();
@@ -148,11 +147,6 @@ public class TBankMarketDataProvider implements MarketDataProvider {
             }
         }
         return all;
-    }
-
-    /** True if the live stream has been marked degraded after failed reconnects. */
-    public boolean isDegraded() {
-        return degraded.get();
     }
 
     /** Cancels all active subscriptions (used at shutdown). */

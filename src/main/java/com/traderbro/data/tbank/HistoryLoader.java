@@ -9,14 +9,15 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
 
 /**
- * Backfills historical bars into the {@code bars} hypertable on startup when
+ * Backfills historical bars into the {@code bars} hypertable when
  * {@code app.history.load-on-startup=true}. Insertions are idempotent via {@link BarStore}.
+ * Invoked by {@code HistoryBackfillRunner} in parallel with the crypto (Binance) backfill so the
+ * two providers don't block each other at startup.
  */
 @Slf4j
-public class HistoryLoader implements CommandLineRunner {
+public class HistoryLoader {
 
     private final MarketDataProvider marketData;
     private final BarStore barStore;
@@ -31,8 +32,8 @@ public class HistoryLoader implements CommandLineRunner {
         this.instruments = instruments;
     }
 
-    @Override
-    public void run(String... args) {
+    /** Backfills T-Bank history; no-op unless {@code app.history.load-on-startup=true}. */
+    public void backfill() {
         if (!config.isLoadOnStartup()) {
             log.info("History backfill disabled (app.history.load-on-startup=false)");
             return;

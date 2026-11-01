@@ -3,11 +3,16 @@ package com.traderbro.api.web;
 import com.traderbro.core.domain.AngulationEvent;
 import com.traderbro.core.domain.DivergenceEvent;
 import com.traderbro.core.domain.enums.CandleInterval;
+import com.traderbro.core.williams.SignalStrengthAggregator;
 import com.traderbro.storage.AngulationEventRepository;
 import com.traderbro.storage.DivergenceEventRepository;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +30,7 @@ public class WilliamsController {
 
     private final DivergenceEventRepository divergences;
     private final AngulationEventRepository angulations;
+    private final SignalStrengthAggregator aggregator;
 
     /** Paginated divergence events, filterable by instrument/timeframe/window/status. */
     @GetMapping("/divergences")
@@ -53,6 +59,37 @@ public class WilliamsController {
             @RequestParam(required = false) String interval,
             @RequestParam(defaultValue = "100") int limit) {
         return angulations.find(figi, parse(interval), limit);
+    }
+
+    /** Combined signal strength per (direction, price block) over the aggregation window. */
+    @GetMapping("/williams/strength")
+    public List<SignalStrengthAggregator.BlockStrength> strength(
+            @RequestParam String figi,
+            @RequestParam(defaultValue = "1h") String interval) {
+        CandleInterval tf = parse(interval);
+        if (tf == null) {
+            return List.of();
+        }
+        Instant now = Instant.now();
+        Instant cutoff = now.minus(Duration.ofMillis((long) aggregator.windowBars()
+                * durationMillis(tf)));
+        List<DivergenceEvent> divs = divergences.find(figi, tf, cutoff, now, null, 2000, 0);
+        Map<UUID, AngulationEvent> ang = angulations.find(figi, tf, 2000).stream()
+                .filter(a -> !a.getTs().isBefore(cutoff))
+                .collect(Collectors.toMap(AngulationEvent::getDivergenceEventId,
+                        a -> a, (x, y) -> x));
+        return aggregator.aggregate(divs, ang);
+    }
+
+    private static long durationMillis(CandleInterval tf) {
+        return switch (tf) {
+            case ONE_MIN -> 60_000L;
+            case FIVE_MIN -> 5 * 60_000L;
+            case FIFTEEN_MIN -> 15 * 60_000L;
+            case ONE_HOUR -> 3_600_000L;
+            case FOUR_HOUR -> 4 * 3_600_000L;
+            case ONE_DAY -> 86_400_000L;
+        };
     }
 
     private static CandleInterval parse(String raw) {

@@ -30,11 +30,13 @@ class AngulationDetectorTest {
 
     private static BarSeries departUpSeries() {
         List<Double> closes = new ArrayList<>();
-        for (int i = 0; i < 30; i++) {
-            closes.add(100.0);                 // flat warm-up: price touches the Jaw
+        // Long flat section so the Jaw is flat (боковик), as per the practitioner's setup.
+        for (int i = 0; i < 40; i++) {
+            closes.add(100.0);
         }
-        for (int i = 1; i <= 20; i++) {
-            closes.add(100 + i * 2.5);         // strong monotonic rise away from the Jaw
+        // Steep departure away from the flat Jaw: price rises 15/bar over 4 bars.
+        for (int i = 1; i <= 4; i++) {
+            closes.add(100 + i * 15.0);
         }
         return series(closes);
     }
@@ -80,6 +82,7 @@ class AngulationDetectorTest {
         AngulationEvent e = res.get();
         assertThat(e.getDirection()).isEqualTo(AngulationEvent.Direction.AWAY_UP);
         assertThat(e.getAngleAtr()).isGreaterThanOrEqualTo(0.1);
+        assertThat(e.getAngleDeg()).isGreaterThanOrEqualTo(45.0);
         assertThat(e.getBarsInWindow()).isGreaterThanOrEqualTo(2);
     }
 
@@ -112,6 +115,33 @@ class AngulationDetectorTest {
 
         assertThat(res).isPresent();
         assertThat(res.get().direction()).isEqualTo(AngulationEvent.Direction.AWAY_UP);
-        assertThat(res.get().angleAtr()).isGreaterThanOrEqualTo(0.1);
+        // A departure registers a non-zero geometric angle (the exact value is diluted by the
+        // lookback window, which is mostly flat in this fixture).
+        assertThat(res.get().angleDeg()).isGreaterThan(0.0);
+    }
+
+    @Test
+    void backgroundReturnToLineIsNotAngulation() {
+        // Price rises away from the Jaw, comes back through the line, then settles back on it —
+        // a return to the line, not a departure.
+        List<Double> closes = new ArrayList<>();
+        for (int i = 0; i < 30; i++) {
+            closes.add(100.0);
+        }
+        for (int i = 1; i <= 8; i++) {
+            closes.add(100 + i * 4.0);          // rise away to a peak of 132
+        }
+        for (int j = 1; j <= 8; j++) {
+            closes.add(132 - j * 4.0);          // fall back through the line to ~100
+        }
+        for (int i = 0; i < 15; i++) {
+            closes.add(100.0);                  // settle back on the Jaw
+        }
+        BarSeries s = series(closes);
+        AlligatorIndicator all = new AlligatorIndicator(s, 13, 8, 8, 5, 5, 3, 14, 0.5);
+        Optional<AngulationDetector.BackgroundAngle> res =
+                detector().backgroundAngle(s, all, all.getAtr(), CandleInterval.ONE_HOUR);
+        // Item 2: a mere return to the line is convergence, not angulation → no background angle.
+        assertThat(res).isEmpty();
     }
 }

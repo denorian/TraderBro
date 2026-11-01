@@ -17,6 +17,17 @@ public class WilliamsProperties {
 
     private Divergence divergence = new Divergence();
     private Angulation angulation = new Angulation();
+    private Aggregation aggregation = new Aggregation();
+
+    /** Aggregation of repeated divergence/angulation signals into a combined strength. */
+    @Getter
+    @Setter
+    public static class Aggregation {
+        /** Events older than this many bars are excluded from the window. */
+        private int windowBars = 120;
+        /** Two events belong to the same "price block" when their peak prices differ by ≤ this %. */
+        private double priceBlockPct = 1.0;
+    }
 
     /** "Twin Peaks" divergence signal on the Awesome Oscillator histogram. */
     @Getter
@@ -42,8 +53,11 @@ public class WilliamsProperties {
     public static class Angulation {
         /** Max bars to look back for the last Jaw touch (the angulation anchor). */
         private int lookbackBars = 60;
-        /** Minimum |priceSlope - jawSlope| in ATR/bars to call it angulation. */
+        /** Minimum |priceSlope - jawSlope| in ATR/bars to call it angulation (legacy metric). */
         private double thresholdAtrPerBar = 0.1;
+        /** Minimum geometric angle between price and Jaw in degrees (default 45°; stronger near
+         * 90°). Primary gate — maps to the practitioner's ">45°, closer to 90°" semantics. */
+        private double thresholdDeg = 45.0;
         /** How long an angulation event stays "fresh" for strategy filters (bars). */
         private int eventsLookbackBars = 30;
         /** ATR period used to normalise the slopes. */

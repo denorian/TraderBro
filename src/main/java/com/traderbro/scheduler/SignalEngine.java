@@ -80,6 +80,11 @@ public class SignalEngine {
         if (instrument == null) {
             return;
         }
+        // Optional per-strategy instrument-type binding (NULL/empty = all types).
+        if (cfg.getInstrumentTypes() != null
+                && !cfg.getInstrumentTypes().contains(instrument.getInstrumentType())) {
+            return;
+        }
         Instant from = upTo.minus(
                 SeriesFactory.toDuration(cfg.getInterval()).multipliedBy(maxBarsInMemory));
         List<Bar> bars = barStore.findByFigiAndInterval(figi, cfg.getInterval(), from, upTo);
@@ -198,11 +203,31 @@ public class SignalEngine {
         payload.put("qtyUnit", instrument.isFuture() ? "контр." : "лот");
         payload.put("notional", sizing.getNotional());
         payload.put("pct", sizing.getEffectivePct().movePointRight(2).setScale(1, java.math.RoundingMode.HALF_UP));
-        payload.put("stop", signal.getPrice());
-        payload.put("stopPct", "0.00");
+        addStop(payload, signal);
         payload.put("indicators", snapshotString(signal));
         publisher.publish(TraderEvent.of(NotificationType.SIGNAL_ENTRY,
                 NotificationLevel.INFO, payload));
+    }
+
+    /** Emits the strategy-provided stop (if any) instead of the old misleading placeholders. */
+    private void addStop(java.util.Map<String, Object> payload, Signal signal) {
+        Object stop = signal.getIndicatorSnapshot().get("stop");
+        if (stop instanceof Number n && n.doubleValue() > 0) {
+            java.math.BigDecimal stopPrice = java.math.BigDecimal.valueOf(n.doubleValue());
+            payload.put("stop", stopPrice.toPlainString());
+            java.math.BigDecimal entry = signal.getPrice();
+            if (entry != null && entry.signum() > 0) {
+                String stopPct = entry.subtract(stopPrice).abs()
+                        .divide(entry, 4, java.math.RoundingMode.HALF_UP)
+                        .movePointRight(2).setScale(1, java.math.RoundingMode.HALF_UP).toPlainString();
+                payload.put("stopPct", stopPct + "%");
+            } else {
+                payload.put("stopPct", "n/a");
+            }
+        } else {
+            payload.put("stop", "n/a");
+            payload.put("stopPct", "n/a");
+        }
     }
 
     private String snapshotString(Signal signal) {

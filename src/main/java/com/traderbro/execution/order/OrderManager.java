@@ -209,16 +209,21 @@ public class OrderManager {
     private void handleFill(OrderFillEvent event) {
         for (Order o : orderStore.findOpen()) {
             if (event.brokerOrderId().equals(o.getBrokerOrderId())) {
-                Order updated = o.withFilledLots(event.filledLots())
+                // The stream does not carry the requested lots, so the final FILLED is derived here
+                // from the cumulative filled lots the source accumulates vs the local order size.
+                long filled = event.filledLots();
+                OrderStatus status = filled >= o.getRequestedLots()
+                        ? OrderStatus.FILLED : OrderStatus.PARTIALLY_FILLED;
+                Order updated = o.withFilledLots(filled)
                         .withAvgFillPrice(event.avgFillPrice())
-                        .withStatus(event.status())
+                        .withStatus(status)
                         .withUpdatedAt(Instant.now());
                 orderStore.update(updated);
-                log.info("order {} -> {} (filled {} lots, avg {})", o.getId(), event.status(),
-                        event.filledLots(), event.avgFillPrice());
-                publishOrderEvent(event.status() == OrderStatus.FILLED
+                log.info("order {} -> {} (filled {} lots, avg {})", o.getId(), status,
+                        filled, event.avgFillPrice());
+                publishOrderEvent(status == OrderStatus.FILLED
                         ? NotificationType.ORDER_FILLED : NotificationType.ORDER_PARTIALLY_FILLED,
-                        o, event.filledLots(), event.avgFillPrice(), null);
+                        o, filled, event.avgFillPrice(), null);
                 return;
             }
         }

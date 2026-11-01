@@ -14,4 +14,10 @@ public interface StreamSubscription {
 
     /** Cancelled/closed? */
     boolean isCancelled();
+
+    /** True if the stream has permanently degraded after exhausting its reconnect attempts.
+     * Defaults to {@code false}; providers that support reconnects override it. */
+    default boolean isDegraded() {
+        return false;
+    }
 }

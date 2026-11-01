@@ -33,17 +33,23 @@ import org.ta4j.core.num.Num;
  */
 public class AngulationDetector {
 
+    /** Bars back to scan for a Jaw touch/cross when deciding "departure vs return to the line". */
+    private static final int RECENT_BARS = 3;
+
     private final int lookbackBars;
     private final double thresholdAtrPerBar;
+    private final double thresholdDeg;
     private final int atrPeriod;
 
     public AngulationDetector(WilliamsProperties.Angulation cfg) {
         this.lookbackBars = cfg.getLookbackBars();
         this.thresholdAtrPerBar = cfg.getThresholdAtrPerBar();
+        this.thresholdDeg = cfg.getThresholdDeg();
         this.atrPeriod = cfg.getAtrPeriod();
     }
 
-    public record BackgroundAngle(double angleAtr, AngulationEvent.Direction direction) {
+    public record BackgroundAngle(double angleAtr, double angleDeg,
+                                  AngulationEvent.Direction direction) {
     }
 
     /**
@@ -85,7 +91,10 @@ public class AngulationDetector {
         double priceSlope = slope(priceLine) / atrNorm;
         double jawSlope = slope(jawLine) / atrNorm;
         double angleAtr = Math.abs(priceSlope - jawSlope);
-        if (angleAtr < thresholdAtrPerBar) {
+        double angleDeg = angleDeg(priceSlope, jawSlope);
+        // Legacy ATR/bars gate (kept for backward compatibility) + the geometric angle gate
+        // (primary, maps to the practitioner's ">45°, closer to 90°").
+        if (angleAtr < thresholdAtrPerBar || angleDeg < thresholdDeg) {
             return Optional.empty();
         }
         // Must be a departure (divergence), not a convergence: price farther from Jaw than at anchor.
@@ -112,6 +121,7 @@ public class AngulationDetector {
                 .priceSlopeAtr(round(priceSlope))
                 .jawSlopeAtr(round(jawSlope))
                 .angleAtr(round(angleAtr))
+                .angleDeg(round(angleDeg))
                 .anchorTs(endTime(series, a))
                 .barsInWindow(barsInWindow)
                 .createdAt(now)
@@ -154,9 +164,40 @@ public class AngulationDetector {
         }
         double jawSlope = slope(jawLine) / atrNorm;
         double angleAtr = Math.abs(priceSlope - jawSlope);
+        double angleDeg = angleDeg(priceSlope, jawSlope);
+        // Departure, not a return: if price touched/crossed the Jaw within the last few bars it
+        // has come back through the line — that is convergence ("возврат к синей линии"), not
+        // angulation.
+        if (recentlyCrossedJaw(series, alligator, last)) {
+            return Optional.empty();
+        }
         return Optional.of(new BackgroundAngle(
-                round(angleAtr),
+                round(angleAtr), round(angleDeg),
                 above ? AngulationEvent.Direction.AWAY_UP : AngulationEvent.Direction.AWAY_DOWN));
+    }
+
+    /** True when the price touched or crossed the Jaw within the last {@code RECENT_BARS}. */
+    private static boolean recentlyCrossedJaw(BarSeries series, AlligatorIndicator alligator,
+                                              int last) {
+        int recent = Math.min(RECENT_BARS, last);
+        for (int k = last; k > last - recent; k--) {
+            double jaw = jawRaw(alligator, series, k);
+            if (Double.isNaN(jaw)) {
+                continue;
+            }
+            if (jaw >= low(series, k) && jaw <= high(series, k)) {
+                return true; // touched the line
+            }
+            if (k >= 1) {
+                double jPrev = jawRaw(alligator, series, k - 1);
+                double cCurr = close(series, k);
+                double cPrev = close(series, k - 1);
+                if (!Double.isNaN(jPrev) && (cPrev - jPrev) * (cCurr - jaw) <= 0) {
+                    return true; // crossed through the line
+                }
+            }
+        }
+        return false;
     }
 
     /** Last bar (nearest the extreme) within {@code lookbackBars} where price touched/crossed Jaw. */
@@ -203,6 +244,14 @@ public class AngulationDetector {
             den += (x - meanX) * (x - meanX);
         }
         return den == 0.0 ? 0.0 : num / den;
+    }
+
+    /** Geometric angle (degrees) of the price's departure from the Jaw: the ATR-normalised rate at
+     * which price separates from the Jaw, {@code atan(|m1 - m2|)}. 1 ATR/bar separation → 45°,
+     * 2 → ~63°, →90° as the departure steepens. If price tracks the Jaw (small difference) the
+     * angle is small — i.e. price is following the line, not angulating. */
+    private static double angleDeg(double m1, double m2) {
+        return Math.toDegrees(Math.atan(Math.abs(m1 - m2)));
     }
 
     private static int indexOf(BarSeries series, Instant ts) {

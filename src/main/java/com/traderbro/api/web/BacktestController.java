@@ -67,9 +67,11 @@ public class BacktestController {
     public record PairResultDto(String strategyId, String figi, MetricsDto metrics, long barsCount,
                                 List<EquityPoint> equity, List<TradeRecord> trades,
                                 List<SignalRecord> signals) {
-        static PairResultDto light(PairResult p) {
+        /** Run-detail projection: metrics + equity curve (the detail page charts it) but not the
+         * potentially huge trades/signals lists, which have their own endpoints. */
+        static PairResultDto light(PairResult p, List<EquityPoint> equity) {
             return new PairResultDto(p.getStrategyId(), p.getFigi(), MetricsDto.from(p.getMetrics()),
-                    p.getBarsCount(), List.of(), List.of(), List.of());
+                    p.getBarsCount(), equity, List.of(), List.of());
         }
     }
 
@@ -110,7 +112,9 @@ public class BacktestController {
             return ResponseEntity.notFound().build();
         }
         List<PairResultDto> pairs = repository.findPairResults(id).stream()
-                .map(PairResultDto::light).toList();
+                .map(p -> PairResultDto.light(p,
+                        repository.findEquity(id, p.getStrategyId(), p.getFigi())))
+                .toList();
         return ResponseEntity.ok(new RunDetailDto(toSummary(run.get()), pairs));
     }
 

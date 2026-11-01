@@ -155,8 +155,11 @@ public class BacktestOrchestrator {
         BarSeries series = SeriesFactory.fromDomain(bars, DecimalNum::valueOf, bars.size() + 10,
                 pair.figi());
         BacktestCosts costs = resolveCosts(request.costs());
-        // Crypto spot uses Binance's taker fee by default (0.1%) unless the caller overrode it.
-        if (instrument.isCrypto() && request.costs() == null) {
+        // Crypto spot uses Binance's taker fee by default (0.1%). The UI always sends a costs
+        // object carrying the equity form defaults (0.05% / 5bps), so "no explicit crypto
+        // override" is detected by comparing the commission against the equity default rather
+        // than by a null object.
+        if (instrument.isCrypto() && !hasExplicitCosts(request.costs())) {
             costs = new BacktestCosts(
                     BigDecimal.valueOf(cryptoProps.getTakerFeePct()).movePointLeft(2),
                     cryptoProps.getSlippageBps(),
@@ -283,6 +286,18 @@ public class BacktestOrchestrator {
                 props.getDefaultCommissionPct().movePointLeft(2), // percent → fraction
                 props.getDefaultSlippageBps(), new BigDecimal("1000000"),
                 new BigDecimal("0.95"));
+    }
+
+    /** True when the caller set an explicit commission different from the equity form default.
+     * The UI always sends a costs object with the equity defaults, so a null request or one that
+     * still carries the default commission is treated as "use the platform default" (see the
+     * crypto taker-fee override in {@link #runPair}). */
+    private boolean hasExplicitCosts(BacktestCosts c) {
+        if (c == null || c.commissionPct() == null) {
+            return false;
+        }
+        BigDecimal defaultComm = props.getDefaultCommissionPct().movePointLeft(2);
+        return c.commissionPct().compareTo(defaultComm) != 0;
     }
 
     /** Merges the request costs with config defaults, so partial requests (e.g. UI sends only

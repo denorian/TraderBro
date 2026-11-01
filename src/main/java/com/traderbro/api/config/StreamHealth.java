@@ -32,6 +32,10 @@ public class StreamHealth {
         degraded.set(true);
     }
 
+    public void clearDegraded() {
+        degraded.set(false);
+    }
+
     public Duration lag() {
         return Duration.between(lastReceiveAt, Instant.now());
     }

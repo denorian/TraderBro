@@ -44,6 +44,7 @@ public class DailySummaryReporter {
     private final TradeRepository tradeRepository;
     private final KillSwitch killSwitch;
     private final StreamHealth streamHealth;
+    private final StreamHealth cryptoStreamHealth;
     private final TraderEventPublisher publisher;
 
     @Scheduled(cron = "0 0 19 * * *", zone = "Europe/Moscow")
@@ -79,7 +80,8 @@ public class DailySummaryReporter {
         payload.put("killSwitch", killSwitch.isActive() ? "АКТИВЕН" : "выключен");
         payload.put("stream", streamHealth.isConnected() ? "OK"
                 : streamHealth.isDegraded() ? "DEGRADED" : "нет данных");
-        payload.put("cryptoStatus", "не торгуется (анализ)");
+        payload.put("cryptoStatus", cryptoStreamHealth.isDegraded()
+                ? "анализ (стрим DEGRADED)" : "не торгуется (анализ)");
         payload.put("ts", now.atZone(MOSCOW).format(TS_FMT));
 
         publisher.publish(TraderEvent.of(NotificationType.DAILY_SUMMARY, NotificationLevel.INFO, payload));

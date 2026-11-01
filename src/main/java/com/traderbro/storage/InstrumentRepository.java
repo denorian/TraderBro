@@ -46,7 +46,10 @@ public class InstrumentRepository {
                 base_asset=EXCLUDED.base_asset, quote_asset=EXCLUDED.quote_asset,
                 tick_size=EXCLUDED.tick_size, step_size=EXCLUDED.step_size,
                 min_notional=EXCLUDED.min_notional, onboard_date=EXCLUDED.onboard_date,
-                market_cap_usd=EXCLUDED.market_cap_usd, market_cap_rank=EXCLUDED.market_cap_rank
+                -- market cap is owned by updateMarketCap (CoinGecko); a fresh exchangeInfo resolve
+                -- has null caps and must not wipe the last known value.
+                market_cap_usd=COALESCE(EXCLUDED.market_cap_usd, instruments.market_cap_usd),
+                market_cap_rank=COALESCE(EXCLUDED.market_cap_rank, instruments.market_cap_rank)
             """;
 
     private final NamedParameterJdbcTemplate named;

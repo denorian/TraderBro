@@ -146,8 +146,16 @@ public class ApplicationConfig {
     }
 
     // ------------------------------------------------------------------ shared state
+    @org.springframework.context.annotation.Primary
     @Bean
     public StreamHealth streamHealth() {
+        return new StreamHealth();
+    }
+
+    /** Health of the Binance crypto stream, kept separate from the T-Bank stream health so a
+     * crypto outage doesn't masquerade as a main-market-data outage in {@code /api/status}. */
+    @Bean
+    public StreamHealth cryptoStreamHealth() {
         return new StreamHealth();
     }
 
@@ -277,6 +285,12 @@ public class ApplicationConfig {
     @Bean
     public AngulationDetector angulationDetector(WilliamsProperties props) {
         return new AngulationDetector(props.getAngulation());
+    }
+
+    @Bean
+    public com.traderbro.core.williams.SignalStrengthAggregator signalStrengthAggregator(
+            WilliamsProperties props) {
+        return new com.traderbro.core.williams.SignalStrengthAggregator(props.getAggregation());
     }
 
     @Bean
@@ -431,9 +445,12 @@ public class ApplicationConfig {
             com.traderbro.storage.TradeRepository tradeRepository,
             KillSwitch killSwitch,
             StreamHealth streamHealth,
+            @org.springframework.beans.factory.annotation.Qualifier("cryptoStreamHealth")
+            StreamHealth cryptoStreamHealth,
             TraderEventPublisher publisher) {
         return new com.traderbro.scheduler.DailySummaryReporter(portfolioProvider,
-                signalRepository, tradeRepository, killSwitch, streamHealth, publisher);
+                signalRepository, tradeRepository, killSwitch, streamHealth, cryptoStreamHealth,
+                publisher);
     }
 
     @Bean
@@ -484,8 +501,12 @@ public class ApplicationConfig {
     public com.traderbro.scheduler.CryptoStreamRunner cryptoStreamRunner(
             com.traderbro.data.binance.BinanceMarketDataProvider md, BarStore barStore,
             com.traderbro.core.indicators.IndicatorSnapshotService snapshotService,
-            CryptoProperties crypto) {
-        return new com.traderbro.scheduler.CryptoStreamRunner(md, barStore, snapshotService, crypto);
+            com.traderbro.scheduler.SignalEngine signalEngine,
+            CryptoProperties crypto,
+            @org.springframework.beans.factory.annotation.Qualifier("cryptoStreamHealth")
+            StreamHealth cryptoStreamHealth) {
+        return new com.traderbro.scheduler.CryptoStreamRunner(md, barStore, snapshotService,
+                signalEngine, crypto, cryptoStreamHealth);
     }
 
     @Bean
@@ -541,6 +562,14 @@ public class ApplicationConfig {
             }
             return resolved;
         });
+    }
+
+    /** Runs the T-Bank and Binance history backfills concurrently at startup. */
+    @Bean
+    public com.traderbro.scheduler.HistoryBackfillRunner historyBackfillRunner(
+            HistoryLoader historyLoader,
+            org.springframework.beans.factory.ObjectProvider<com.traderbro.data.binance.CryptoHistoryLoader> cryptoProvider) {
+        return new com.traderbro.scheduler.HistoryBackfillRunner(historyLoader, cryptoProvider);
     }
 
     // ------------------------------------------------------------------ startup sequence

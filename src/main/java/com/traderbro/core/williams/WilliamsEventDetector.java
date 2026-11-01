@@ -148,12 +148,14 @@ public class WilliamsEventDetector {
                 + D2.format(div.getPriceAtPeak2()));
         p.put("strength", D2.format(div.getStrength()));
         p.put("angulation", ang == null ? "нет"
-                : "есть — " + D2.format(ang.getAngleAtr()) + " ATR/бар, уход "
+                : "есть — " + D2.format(ang.getAngleDeg()) + "° ("
+                        + D2.format(ang.getAngleAtr()) + " ATR/бар), уход "
                         + (ang.getDirection() == AngulationEvent.Direction.AWAY_UP ? "вверх" : "вниз"));
         if (ang != null) {
             p.put("priceSlope", D2.format(ang.getPriceSlopeAtr()));
             p.put("jawSlope", D2.format(ang.getJawSlopeAtr()));
             p.put("angleAtr", D2.format(ang.getAngleAtr()));
+            p.put("angleDeg", D2.format(ang.getAngleDeg()));
             p.put("bars", ang.getBarsInWindow());
         }
         publisher.publish(TraderEvent.of(type, level, p));

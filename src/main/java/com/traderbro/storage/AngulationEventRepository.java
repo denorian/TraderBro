@@ -19,15 +19,15 @@ public class AngulationEventRepository {
 
     private static final String COLS = """
             figi, interval, ts, divergence_event_id, direction, price_slope_atr,
-            jaw_slope_atr, angle_atr, anchor_ts, bars_in_window, created_at
+            jaw_slope_atr, angle_atr, angle_deg, anchor_ts, bars_in_window, created_at
             """;
 
     private static final String UPSERT = """
             INSERT INTO angulation_events
                 (figi, interval, ts, divergence_event_id, direction, price_slope_atr,
-                 jaw_slope_atr, angle_atr, anchor_ts, bars_in_window, created_at)
+                 jaw_slope_atr, angle_atr, angle_deg, anchor_ts, bars_in_window, created_at)
             VALUES (:figi, :interval, :ts, :divergenceEventId, :direction, :priceSlopeAtr,
-                    :jawSlopeAtr, :angleAtr, :anchorTs, :barsInWindow, :createdAt)
+                    :jawSlopeAtr, :angleAtr, :angleDeg, :anchorTs, :barsInWindow, :createdAt)
             ON CONFLICT (figi, interval, ts, divergence_event_id) DO NOTHING
             """;
 
@@ -54,6 +54,7 @@ public class AngulationEventRepository {
                         .addValue("priceSlopeAtr", e.getPriceSlopeAtr())
                         .addValue("jawSlopeAtr", e.getJawSlopeAtr())
                         .addValue("angleAtr", e.getAngleAtr())
+                        .addValue("angleDeg", e.getAngleDeg())
                         .addValue("anchorTs", Timestamp.from(e.getAnchorTs()))
                         .addValue("barsInWindow", e.getBarsInWindow())
                         .addValue("createdAt", Timestamp.from(e.getCreatedAt())))
@@ -95,6 +96,7 @@ public class AngulationEventRepository {
                     .priceSlopeAtr(rs.getDouble("price_slope_atr"))
                     .jawSlopeAtr(rs.getDouble("jaw_slope_atr"))
                     .angleAtr(rs.getDouble("angle_atr"))
+                    .angleDeg(rs.getDouble("angle_deg"))
                     .anchorTs(rs.getTimestamp("anchor_ts").toInstant())
                     .barsInWindow(rs.getInt("bars_in_window"))
                     .createdAt(rs.getTimestamp("created_at").toInstant())

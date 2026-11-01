@@ -119,6 +119,8 @@ williams:
   angulation:
     lookback-bars: 60
     threshold-atr-per-bar: 0.05
+    # Геометрический угол (градусы) между ценой и синей линией: >45° = уход, ближе к 90° = максимум.
+    threshold-deg: 45
     events-lookback-bars: 30
 
 ui:

@@ -130,7 +130,8 @@ public class UiController {
     // ------------------------------------------------------------------ /api/indicators/latest
     public record LatestIndicatorDto(String figi, String interval, Instant ts,
                                      Map<String, Object> alligator, Map<String, Object> ao,
-                                     Double angulationAngleAtr, String angulationDirection) {
+                                     Double angulationAngleAtr, Double angulationAngleDeg,
+                                     String angulationDirection) {
     }
 
     /** Latest Alligator + AO + angulation snapshot per instrument for the dashboard summary. */
@@ -144,6 +145,7 @@ public class UiController {
             Map<String, Object> alligator = Map.of();
             Map<String, Object> ao = Map.of();
             Double angleAtr = null;
+            Double angleDeg = null;
             String angDir = null;
             Instant ts = null;
             for (IndicatorSnapshot s : e.getValue()) {
@@ -154,13 +156,15 @@ public class UiController {
                     ao = s.getValues();
                 } else if (s.getIndicator() == IndicatorSnapshot.IndicatorKind.ANGULATION) {
                     Object a = s.getValues().get("angle_atr");
+                    Object dg = s.getValues().get("angle_deg");
                     Object d = s.getValues().get("direction");
                     angleAtr = a instanceof Number n ? n.doubleValue() : null;
+                    angleDeg = dg instanceof Number n ? n.doubleValue() : null;
                     angDir = d instanceof String str ? str : null;
                 }
             }
             out.add(new LatestIndicatorDto(e.getKey(), tf.name(), ts, alligator, ao,
-                    angleAtr, angDir));
+                    angleAtr, angleDeg, angDir));
         }
         out.sort(java.util.Comparator.comparing(LatestIndicatorDto::figi));
         return out;

@@ -51,6 +51,7 @@ export interface LatestIndicatorDto {
   alligator: Record<string, unknown>;
   ao: Record<string, unknown>;
   angulationAngleAtr?: number | null;
+  angulationAngleDeg?: number | null;
   angulationDirection?: string | null;
 }
 
@@ -82,6 +83,7 @@ export interface AngulationEventDto {
   priceSlopeAtr: number;
   jawSlopeAtr: number;
   angleAtr: number;
+  angleDeg: number;
   anchorTs: string;
   barsInWindow: number;
   createdAt: string;
@@ -113,6 +115,7 @@ export interface StatusResponse {
   dataStream: ComponentStatusDto;
   broker: ComponentStatusDto;
   db: ComponentStatusDto;
+  cryptoStream: ComponentStatusDto;
   killSwitchActive: boolean;
   killSwitchReason?: string;
   positions: PositionDto[];

@@ -1,8 +1,10 @@
 package com.traderbro.core.domain;
 
 import com.traderbro.core.domain.enums.CandleInterval;
+import com.traderbro.core.domain.enums.InstrumentType;
 import com.traderbro.core.domain.enums.OrderType;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import lombok.Builder;
 import lombok.Value;
@@ -23,6 +25,8 @@ public class StrategyConfig {
     /** Max position size as a fraction of portfolio value for this strategy's signals. */
     BigDecimal maxPositionPct;
     CandleInterval interval;
+    /** Optional allowed instrument types; null/empty = strategy runs on all instrument types. */
+    List<InstrumentType> instrumentTypes;
     /** Version/row version for optimistic reload detection. */
     long version;
 }
