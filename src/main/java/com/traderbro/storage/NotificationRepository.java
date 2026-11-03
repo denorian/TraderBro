@@ -81,6 +81,16 @@ public class NotificationRepository implements NotificationStore {
                 """, mapper, maxAttempts, limit);
     }
 
+    @Override
+    public boolean existsWithDedupKey(String dedupKey) {
+        if (dedupKey == null || dedupKey.isBlank()) {
+            return false;
+        }
+        Integer n = jdbc.queryForObject(
+                "SELECT count(*) FROM notifications WHERE dedup_key = ?", Integer.class, dedupKey);
+        return n != null && n > 0;
+    }
+
     private String toJson(Map<String, Object> payload) {
         try {
             return objectMapper.writeValueAsString(payload == null ? Map.of() : payload);

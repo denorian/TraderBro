@@ -83,9 +83,8 @@ public class WilliamsEventDetector {
         AlligatorIndicator alligator = factory.alligator(series);
         ATRIndicator atr = alligator.getAtr();
 
-        Instant from = bars.get(0).getTs();
         Instant to = bars.get(bars.size() - 1).getTs();
-        Map<UUID, DivergenceEvent.Status> known = existingStatus(figi, tf, from, to);
+        Map<UUID, DivergenceEvent.Status> known = existingStatus(figi, tf, to);
         Set<UUID> knownAng = angulations.find(figi, tf, 2000).stream()
                 .map(AngulationEvent::getDivergenceEventId)
                 .collect(java.util.stream.Collectors.toCollection(HashSet::new));
@@ -124,9 +123,12 @@ public class WilliamsEventDetector {
     }
 
     private Map<UUID, DivergenceEvent.Status> existingStatus(String figi, CandleInterval tf,
-                                                             Instant from, Instant to) {
+                                                             Instant to) {
+        // Load this pair/timeframe's events WITHOUT narrowing on the passed bar window: catch-up
+        // may hand a recent window whose start falls after an older formation, which would then
+        // look "new" and be re-sent. Checking existence by id (window-independent) prevents that.
         Map<UUID, DivergenceEvent.Status> out = new HashMap<>();
-        for (DivergenceEvent e : divergences.find(figi, tf, from, to, null, 2000, 0)) {
+        for (DivergenceEvent e : divergences.find(figi, tf, null, to, null, 2000, 0)) {
             out.put(e.getId(), e.getStatus());
         }
         return out;

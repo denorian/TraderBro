@@ -49,6 +49,13 @@ public class NotificationService implements TraderEventPublisher {
             skipped.incrementAndGet();
             return;
         }
+        // Permanent dedup for deterministic (non-transient) events: a divergence/angulation
+        // carries a stable natural key, so once queued/sent it must never be re-sent — even
+        // across restarts or catch-up rescans. In-memory windows alone would forget on restart.
+        if (isPermanentKey(event.type()) && store.existsWithDedupKey(dedupKey)) {
+            skipped.incrementAndGet();
+            return;
+        }
         NotificationRecord record = NotificationRecord.builder()
                 .type(event.type())
                 .level(event.level())
@@ -72,12 +79,25 @@ public class NotificationService implements TraderEventPublisher {
         return true;
     }
 
+    /** Event types whose dedup key is a stable natural key, so they are permanently deduplicated
+     * by the DB across restarts. Transient events (signals, fills) are not. */
+    private static boolean isPermanentKey(NotificationType type) {
+        return switch (type) {
+            case AO_DIVERGENCE_DETECTED, AO_DIVERGENCE_CONFIRMED, ANGULATION_DETECTED -> true;
+            default -> false;
+        };
+    }
+
     private String dedupKeyFor(TraderEvent e) {
         return switch (e.type()) {
             case SIGNAL_REJECTED -> NotificationDeduplicator.keyFor(
                     e.type().name(), e.payload(), "strategyId", "figi", "reason");
             case ORDER_PARTIALLY_FILLED -> NotificationDeduplicator.keyFor(
                     e.type().name(), e.payload(), "orderId");
+            case AO_DIVERGENCE_DETECTED, AO_DIVERGENCE_CONFIRMED, ANGULATION_DETECTED ->
+                    NotificationDeduplicator.keyFor(
+                            e.type().name(), e.payload(), "figi", "interval", "aoPeaks",
+                            "priceAtPeaks");
             default -> null;
         };
     }

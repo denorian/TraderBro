@@ -20,4 +20,7 @@ public interface NotificationStore {
 
     /** Notifications to (re)send: PENDING or FAILED with attempts below the max. */
     List<NotificationRecord> findPendingForRetry(int maxAttempts, int limit);
+
+    /** True if a notification with this dedup key already exists (queued, sent or failed). */
+    boolean existsWithDedupKey(String dedupKey);
 }
