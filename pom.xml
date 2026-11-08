@@ -62,7 +62,9 @@
         <!-- Plugins -->
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.6.1</maven-surefire-plugin.version>
-        <jacoco.version>0.8.16</jacoco.version>
+        <!-- 0.8.16 is not yet mirrored on the corporate Artifactory (403); 0.8.14 is the newest
+             that resolves there, which the Docker build relies on. -->
+        <jacoco.version>0.8.14</jacoco.version>
 
         <!-- project meta for backtest_runs.code_version -->
         <git-hash>${maven.build.timestamp}</git-hash>

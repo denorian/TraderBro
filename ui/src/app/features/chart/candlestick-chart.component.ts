@@ -2,8 +2,10 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  effect,
   ElementRef,
   EventEmitter,
+  inject,
   Input,
   OnDestroy,
   Output,
@@ -23,6 +25,7 @@ import {
   UTCTimestamp
 } from 'lightweight-charts';
 import { ChartResponse, DivergenceEventDto, SignalRecordDto } from '../../core/models';
+import { ThemeService } from '../../core/theme.service';
 import { strategyColor } from '../../shared/strategy-colors';
 
 @Component({
@@ -103,6 +106,8 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
   @Output() loadOlder = new EventEmitter<void>();
   @Output() divergenceClick = new EventEmitter<DivergenceEventDto>();
 
+  private readonly theme = inject(ThemeService);
+
   private _data: ChartResponse | null = null;
   private _signals: SignalRecordDto[] = [];
   private _selectedStrategies: string[] = [];
@@ -121,18 +126,36 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
   private readonly mainSeries: ISeriesApi<any>[] = [];
   private readonly aoSeries: ISeriesApi<any>[] = [];
 
-  private static readonly options = {
-    autoSize: true,
-    layout: { background: { color: '#1a1b25' }, textColor: '#d1d2dc' },
-    grid: { vertLines: { color: '#262a3a' }, horzLines: { color: '#262a3a' } },
-    rightPriceScale: { borderColor: '#30344c' },
-    timeScale: { borderColor: '#30344c', timeVisible: true }
-  };
+  /** Chart colors resolved from Taiga CSS variables at render time, so they follow the theme. */
+  private static themeColors(): { bg: string; text: string; grid: string; border: string } {
+    const s = getComputedStyle(document.documentElement);
+    const pick = (name: string, fallback: string) => {
+      const v = s.getPropertyValue(name).trim();
+      return v ? v : fallback;
+    };
+    return {
+      bg: pick('--tui-background-base', '#1a1b25'),
+      text: pick('--tui-text-primary', '#d1d2dc'),
+      grid: pick('--tui-border-normal', '#262a3a'),
+      border: pick('--tui-border-normal', '#30344c')
+    };
+  }
+
+  private chartOptions(): any {
+    const c = CandlestickChartComponent.themeColors();
+    return {
+      autoSize: true,
+      layout: { background: { color: c.bg }, textColor: c.text },
+      grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
+      rightPriceScale: { borderColor: c.border },
+      timeScale: { borderColor: c.border, timeVisible: true }
+    };
+  }
 
   ngAfterViewInit(): void {
-    this.chart = createChart(this.mainEl.nativeElement, CandlestickChartComponent.options);
+    this.chart = createChart(this.mainEl.nativeElement, this.chartOptions());
     this.aoChart = createChart(this.aoEl.nativeElement, {
-      ...CandlestickChartComponent.options,
+      ...this.chartOptions(),
       timeScale: { visible: false }
     });
     this.syncTimeScales();
@@ -140,6 +163,26 @@ export class CandlestickChartComponent implements AfterViewInit, OnDestroy {
     if (this._data) {
       this.render(this._data);
     }
+    // Re-style the chart when the light/dark theme toggles.
+    effect(() => {
+      this.theme.theme();
+      this.applyTheme();
+    });
+  }
+
+  private applyTheme(): void {
+    if (!this.chart || !this.aoChart) {
+      return;
+    }
+    const c = CandlestickChartComponent.themeColors();
+    const options = {
+      layout: { background: { color: c.bg }, textColor: c.text },
+      grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
+      rightPriceScale: { borderColor: c.border },
+      timeScale: { borderColor: c.border, timeVisible: true }
+    };
+    this.chart.applyOptions(options);
+    this.aoChart.applyOptions({ ...options, timeScale: { visible: false, borderColor: c.border } });
   }
 
   private rerender(): void {

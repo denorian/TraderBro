@@ -6,7 +6,16 @@
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
   </head>
-  <body tuiTheme="dark">
+  <body>
+    <script>
+      // Apply the saved theme before first paint to avoid a flash of the wrong theme. The attribute
+      // must be on <body>, not on :root — Taiga's light palette targets :root too and would win on
+      // <html> (light rule comes later with equal specificity), breaking the dark theme.
+      try {
+        var t = localStorage.getItem('traderbro.theme');
+        document.body.setAttribute('tuiTheme', t === 'light' ? 'light' : 'dark');
+      } catch (e) {}
+    </script>
     <app-root></app-root>
   </body>
 </html>

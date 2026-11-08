@@ -8,6 +8,11 @@ import { InstrumentDto, StrategyDto } from '../../core/models';
 
 type Tf = 'FIFTEEN_MIN' | 'ONE_HOUR' | 'FOUR_HOUR' | 'ONE_DAY';
 
+interface ParamOverride {
+  key: string;
+  value: string;
+}
+
 @Component({
   selector: 'app-backtest-form',
   standalone: true,
@@ -108,10 +113,48 @@ type Tf = 'FIFTEEN_MIN' | 'ONE_HOUR' | 'FOUR_HOUR' | 'ONE_DAY';
           </div>
         </div>
 
+        <div class="row2">
+          <div class="field">
+            <label>Стартовый капитал</label>
+            <input type="number" step="10000" #cap [value]="initialCapital()"
+              (input)="initialCapital.set(parseNum(cap.value))" />
+          </div>
+          <div class="field">
+            <label>Макс. позиция, %</label>
+            <input type="number" step="1" #mp [value]="maxPositionPct()"
+              (input)="maxPositionPct.set(parseNum(mp.value))" />
+          </div>
+        </div>
+
         <label class="row">
           <input type="checkbox" [checked]="walkForward()" (change)="toggleWalkForward($event)">
           Walk-forward оптимизация
         </label>
+
+        <fieldset>
+          <legend>Параметры стратегий (опционально)</legend>
+          <p class="hint">Для каждой выбранной стратегии можно переопределить её параметры.</p>
+          @for (s of strategies(); track s.id) {
+            @if (selectedStrategies().includes(s.id)) {
+              <div class="strategy-params">
+                <div class="strategy-title">{{ s.name }} <span class="id">{{ s.id }}</span></div>
+                <div class="param-row">
+                  <input type="text" #pname placeholder="ключ (например fast)" />
+                  <input type="text" #pval placeholder="значение (например 5)" />
+                  <button tuiButton size="s" appearance="flat" type="button"
+                    (click)="addParam(s.id, pname.value, pval.value, pname, pval)">+</button>
+                </div>
+                @for (ov of paramOverrides()[s.id] ?? []; track ov.key) {
+                  <div class="param-chip">
+                    {{ ov.key }} = {{ ov.value }}
+                    <button class="chip-remove" type="button"
+                      (click)="removeParam(s.id, ov.key)">✕</button>
+                  </div>
+                }
+              </div>
+            }
+          }
+        </fieldset>
 
         <div class="actions">
           <button tuiButton appearance="primary" size="m"
@@ -144,6 +187,21 @@ type Tf = 'FIFTEEN_MIN' | 'ONE_HOUR' | 'FOUR_HOUR' | 'ONE_DAY';
     .actions { display: flex; align-items: center; gap: 1rem; }
     .error { color: var(--tui-status-negative); }
     .muted { color: var(--tui-text-secondary); }
+    .hint { color: var(--tui-text-secondary); font-size: .85rem; margin: 0 0 .5rem; }
+    .strategy-params { display: flex; flex-direction: column; gap: .35rem; padding: .5rem 0;
+      border-bottom: 1px dashed var(--tui-border-normal); }
+    .strategy-title { font-weight: 600; }
+    .strategy-title .id { color: var(--tui-text-secondary); font-weight: 400; font-size: .8rem;
+      margin-left: .35rem; }
+    .param-row { display: flex; gap: .35rem; align-items: center; }
+    .param-row input { flex: 1; padding: .3rem .5rem; border: 1px solid var(--tui-border-normal);
+      border-radius: var(--tui-radius-m); background: var(--tui-background-base);
+      color: var(--tui-text-primary); }
+    .param-chip { display: inline-flex; align-items: center; gap: .4rem; padding: .15rem .5rem;
+      background: var(--tui-background-neutral-1); border-radius: var(--tui-radius-s);
+      font-size: .85rem; width: fit-content; }
+    .chip-remove { background: none; border: none; cursor: pointer; color: var(--tui-text-secondary);
+      padding: 0 .1rem; }
   `]
 })
 export class BacktestFormComponent implements OnInit {
@@ -160,9 +218,13 @@ export class BacktestFormComponent implements OnInit {
   readonly to = signal<string>(this.today());
   readonly commissionPct = signal(0.05);
   readonly slippageBps = signal(5);
+  readonly initialCapital = signal(1000000);
+  readonly maxPositionPct = signal(95);
   readonly walkForward = signal(false);
   readonly submitting = signal(false);
   readonly error = signal('');
+  /** Per-strategy parameter overrides: strategyId -> list of {key, value}. */
+  readonly paramOverrides = signal<Record<string, ParamOverride[]>>({});
 
   readonly shares = () => this.instruments().filter((i) => i.type === 'SHARE');
   readonly futures = () => this.instruments().filter((i) => i.type === 'FUTURE');
@@ -190,6 +252,42 @@ export class BacktestFormComponent implements OnInit {
     return Number(v);
   }
 
+  addParam(strategyId: string, key: string, value: string,
+           keyInput: HTMLInputElement, valueInput: HTMLInputElement): void {
+    if (!key.trim()) {
+      return;
+    }
+    this.paramOverrides.update((m) => {
+      const list = m[strategyId] ?? [];
+      return { ...m, [strategyId]: [...list.filter((p) => p.key !== key), { key: key.trim(), value: value }] };
+    });
+    keyInput.value = '';
+    valueInput.value = '';
+  }
+
+  removeParam(strategyId: string, key: string): void {
+    this.paramOverrides.update((m) => {
+      const list = m[strategyId] ?? [];
+      const rest = list.filter((p) => p.key !== key);
+      if (rest.length === 0) {
+        const { [strategyId]: _omit, ...others } = m;
+        return others;
+      }
+      return { ...m, [strategyId]: rest };
+    });
+  }
+
+  private strategyOverridesPayload(): Record<string, Record<string, unknown>> | undefined {
+    const overrides = this.paramOverrides();
+    const entries = Object.entries(overrides).filter(([, list]) => list.length > 0);
+    if (entries.length === 0) {
+      return undefined;
+    }
+    return Object.fromEntries(
+      entries.map(([id, list]) => [id, Object.fromEntries(list.map((p) => [p.key, p.value]))])
+    );
+  }
+
   async submit(): Promise<void> {
     const fromDate = new Date(`${this.from()}T00:00:00Z`);
     const toDate = new Date(`${this.to()}T23:59:59Z`);
@@ -208,8 +306,11 @@ export class BacktestFormComponent implements OnInit {
         to: toDate.toISOString(),
         costs: {
           commissionPct: this.commissionPct() / 100,
-          slippageBps: this.slippageBps()
+          slippageBps: this.slippageBps(),
+          initialCapital: this.initialCapital(),
+          maxPositionPct: this.maxPositionPct() / 100
         },
+        strategyParamsOverrides: this.strategyOverridesPayload(),
         walkForward: this.walkForward()
       }));
       await this.router.navigate(['/backtest', res.id]);

@@ -1,10 +1,13 @@
-# Build stage — Maven build of the mono-module artifact (Java 25 toolchain required)
+# Build stage — Maven build of the mono-module artifact (Java 25 toolchain required).
+# The Angular UI is NOT bundled here: it is built and served by the separate `frontend`
+# container (nginx) in the two-container docker-compose layout.
 FROM maven:3.9.11-eclipse-temurin-25 AS build
 WORKDIR /build
-COPY pom.xml lombok.config ./
-COPY checkstyle ./checkstyle
+COPY pom.xml lombok.config docker-maven-settings.xml ./
 COPY src ./src
-RUN mvn -B -DskipTests package
+# -s docker-maven-settings.xml: Maven Central is blocked from the corporate network, so all
+# dependency resolution goes through the internal Artifactory (mirrorOf *).
+RUN mvn -B -s docker-maven-settings.xml -DskipTests package
 
 # Runtime stage
 FROM eclipse-temurin:25-jre

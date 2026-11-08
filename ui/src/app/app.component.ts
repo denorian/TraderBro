@@ -4,6 +4,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { TuiRoot } from '@taiga-ui/core';
 import { filter } from 'rxjs';
 import { TokenService } from './core/token.service';
+import { ThemeService } from './core/theme.service';
 
 /**
  * App shell: a top navigation menu over the routed content. The menu is shown only when an
@@ -35,6 +36,11 @@ import { TokenService } from './core/token.service';
             routerLinkActive="nav-active"
           >Бэктест</a>
           <span class="spacer"></span>
+          <button
+            class="theme-toggle"
+            (click)="theme.toggle()"
+            [attr.title]="theme.theme() === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'"
+          >{{ theme.theme() === 'dark' ? '🌙' : '☀️' }}</button>
           <a class="nav-link" (click)="logout()">Выйти</a>
         </nav>
       }
@@ -52,12 +58,15 @@ import { TokenService } from './core/token.service';
     .nav-link.nav-active { color: var(--tui-text-primary);
       box-shadow: inset 0 -2px 0 var(--tui-status-info); }
     .spacer { flex: 1; }
+    .theme-toggle { background: none; border: none; cursor: pointer; font-size: 1.1rem;
+      line-height: 1; padding: .25rem; }
   `]
 })
 export class AppComponent {
   private readonly router = inject(Router);
   private readonly token = inject(TokenService);
   private readonly destroyRef = inject(DestroyRef);
+  readonly theme = inject(ThemeService);
 
   readonly authed = signal(this.token.has());
 

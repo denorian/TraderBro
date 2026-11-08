@@ -47,19 +47,12 @@ public class AoDivergenceReversalStrategy extends AbstractTradingStrategy {
 
     private final AoTwinPeaksDetector twinPeaks;
     private final AngulationDetector angulation;
-    private final boolean allowShort;
-    private final int atrPeriod;
-    private final int lookbackBars;
 
     public AoDivergenceReversalStrategy(int moneyScale, AoTwinPeaksDetector twinPeaks,
-                                        AngulationDetector angulation, boolean allowShort,
-                                        int atrPeriod, int lookbackBars) {
+                                        AngulationDetector angulation) {
         super(moneyScale);
         this.twinPeaks = twinPeaks;
         this.angulation = angulation;
-        this.allowShort = allowShort;
-        this.atrPeriod = atrPeriod;
-        this.lookbackBars = lookbackBars;
     }
 
     @Override
@@ -67,12 +60,14 @@ public class AoDivergenceReversalStrategy extends AbstractTradingStrategy {
         return ID;
     }
 
-    private record Params(int fast, int slow, double stopBufferAtr, double thresholdAtrPerBar) {
+    private record Params(int fast, int slow, double stopBufferAtr, double thresholdAtrPerBar,
+                          boolean allowShort, int atrPeriod) {
     }
 
     private Params params(StrategyParams p) {
         return new Params(p.getInt("fast", 5), p.getInt("slow", 34),
-                p.getDouble("stopBufferAtr", 0.3), p.getDouble("thresholdAtrPerBar", 0.1));
+                p.getDouble("stopBufferAtr", 0.3), p.getDouble("thresholdAtrPerBar", 0.1),
+                p.getBoolean("allowShort", true), p.getInt("atrPeriod", 14));
     }
 
     @Override
@@ -115,7 +110,7 @@ public class AoDivergenceReversalStrategy extends AbstractTradingStrategy {
         BarSeries sub = series.getSubSeries(0, endIndex + 1);
         AwesomeOscillatorIndicator ao = new AwesomeOscillatorIndicator(sub, p.fast(), p.slow());
         AlligatorIndicator alligator = new AlligatorIndicator(sub,
-                13, 8, 8, 5, 5, 3, atrPeriod, 0.5);
+                13, 8, 8, 5, 5, 3, p.atrPeriod(), 0.5);
         ATRIndicator atr = alligator.getAtr();
         CandleInterval tf = intervalOf(sub);
         List<DivergenceEvent> events = twinPeaks.scan(sub, ao, tf, sub.getName());
@@ -134,7 +129,7 @@ public class AoDivergenceReversalStrategy extends AbstractTradingStrategy {
             }
             Direction dir = e.getDirection() == DivergenceEvent.Direction.BEARISH
                     ? Direction.SHORT : Direction.LONG;
-            if (dir == Direction.SHORT && !allowShort) {
+            if (dir == Direction.SHORT && !p.allowShort()) {
                 return null;
             }
             if (!angulated(sub, alligator, atr, e, tf, p)) {

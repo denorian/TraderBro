@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Maven settings for the TraderBro Docker build. repo.maven.org is blocked from the
+     corporate network, so all dependency resolution goes through the internal Artifactory
+     (mirror of Central). Used only by the Docker build stage. -->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              https://maven.apache.org/xsd/settings-1.0.0.xsd">
+    <mirrors>
+        <mirror>
+            <id>artifactory-maven-all</id>
+            <name>TCS Bank Artifactory (Maven mirror)</name>
+            <url>https://artifactory.tcsbank.ru/artifactory/maven-all</url>
+            <mirrorOf>*</mirrorOf>
+        </mirror>
+    </mirrors>
+</settings>

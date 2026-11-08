@@ -229,8 +229,7 @@ public class ApplicationConfig {
                 new AlligatorAoStrategy(app.getMoneyScale(), indicatorFactory.getAlligator(),
                         angulationDetector, williams.getAngulation().getThresholdAtrPerBar()),
                 new AoDivergenceReversalStrategy(app.getMoneyScale(), twinPeaks,
-                        angulationDetector, aoDiv.isAllowShort(), aoDiv.getAtrPeriod(),
-                        williams.getAngulation().getLookbackBars())));
+                        angulationDetector)));
         return list;
     }
 
