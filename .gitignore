@@ -30,6 +30,13 @@ reports/
 prod.env
 .env.*
 
+# Stage 4.0 — personal Telegram account session (TDLib DB + files, contains credentials).
+# Never commit regardless of where it is placed (default /var/lib/traderbro/telegram-user).
+telegram-user/
+**/telegram-user/
+tdlib-db/
+**/tdlib-db/
+
 # OS
 .DS_Store
 

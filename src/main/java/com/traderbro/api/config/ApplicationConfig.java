@@ -88,6 +88,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -100,7 +101,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         RiskProperties.class, ExecutionProperties.class, FuturesProperties.class,
         IndicatorsProperties.class, BacktestProperties.class, InstrumentsProperties.class,
         WilliamsProperties.class, AoDivergenceProperties.class, CryptoProperties.class,
-        com.traderbro.notify.telegram.TelegramProperties.class})
+        com.traderbro.notify.telegram.TelegramProperties.class,
+        com.traderbro.signalanalysis.SignalAnalysisProperties.class})
 public class ApplicationConfig {
 
     // ------------------------------------------------------------------ T-Bank SDK
@@ -569,6 +571,109 @@ public class ApplicationConfig {
             HistoryLoader historyLoader,
             org.springframework.beans.factory.ObjectProvider<com.traderbro.data.binance.CryptoHistoryLoader> cryptoProvider) {
         return new com.traderbro.scheduler.HistoryBackfillRunner(historyLoader, cryptoProvider);
+    }
+
+    // ------------------------------------------------------------------ signal analysis (stage 4.0, personal Telegram ingestion)
+    // All native-TDLib beans are created only when signal-analysis.ingestion.enabled=true. The
+    // REST/UI beans (SignalAnalysisController, query/monitoring services, health indicator,
+    // TelegramSessionManager) are always present and keep working when ingestion is off.
+
+    @Bean
+    @ConditionalOnProperty(name = "signal-analysis.ingestion.enabled", havingValue = "true")
+    public com.traderbro.signalanalysis.ingestion.TelegramMessageSnapshotMapper telegramMessageSnapshotMapper(
+            tools.jackson.databind.ObjectMapper objectMapper) {
+        return new com.traderbro.signalanalysis.ingestion.TelegramMessageSnapshotMapper(objectMapper);
+    }
+
+    @Bean
+    @Profile("!signal-auth")
+    @ConditionalOnProperty(name = "signal-analysis.ingestion.enabled", havingValue = "true")
+    public com.traderbro.signalanalysis.telegram.TelegramUserClient telegramUserClient(
+            com.traderbro.signalanalysis.SignalAnalysisProperties props,
+            com.traderbro.signalanalysis.telegram.TelegramSessionManager session) {
+        return new com.traderbro.signalanalysis.telegram.tdlib.TdLibTelegramUserClient(props, session);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "signal-analysis.ingestion.enabled", havingValue = "true")
+    public com.traderbro.signalanalysis.ingestion.TelegramIngestEventWriter telegramIngestEventWriter(
+            com.traderbro.signalanalysis.repository.TelegramIngestEventRepository events,
+            tools.jackson.databind.ObjectMapper objectMapper,
+            com.traderbro.signalanalysis.SignalAnalysisProperties props) {
+        return new com.traderbro.signalanalysis.ingestion.TelegramIngestEventWriter(
+                events, objectMapper, props.getIngestion().getInbox().getQueueCapacity());
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "signal-analysis.ingestion.enabled", havingValue = "true")
+    public com.traderbro.signalanalysis.ingestion.TelegramUpdateRouter telegramUpdateRouter(
+            com.traderbro.signalanalysis.ingestion.TelegramIngestEventWriter writer) {
+        return new com.traderbro.signalanalysis.ingestion.TelegramUpdateRouter(writer);
+    }
+
+    @Bean
+    @Profile("!signal-auth")
+    @ConditionalOnProperty(name = "signal-analysis.ingestion.enabled", havingValue = "true")
+    public com.traderbro.signalanalysis.service.TelegramChannelDiscoveryService telegramChannelDiscoveryService(
+            com.traderbro.signalanalysis.repository.TelegramChannelRepository channels,
+            com.traderbro.signalanalysis.repository.TelegramSyncRunRepository syncRuns,
+            com.traderbro.signalanalysis.telegram.TelegramUserClient client,
+            com.traderbro.signalanalysis.telegram.TelegramSessionManager session,
+            com.traderbro.signalanalysis.SignalAnalysisProperties props) {
+        return new com.traderbro.signalanalysis.service.TelegramChannelDiscoveryService(
+                channels, syncRuns, client, session, props);
+    }
+
+    @Bean
+    @Profile("!signal-auth")
+    @ConditionalOnProperty(name = "signal-analysis.ingestion.enabled", havingValue = "true")
+    public com.traderbro.signalanalysis.ingestion.TelegramIngestEventProcessor telegramIngestEventProcessor(
+            com.traderbro.signalanalysis.repository.TelegramIngestEventRepository events,
+            com.traderbro.signalanalysis.repository.TelegramChannelRepository channels,
+            com.traderbro.signalanalysis.service.TelegramMessageService messageService,
+            com.traderbro.signalanalysis.service.TelegramChannelDiscoveryService discovery,
+            com.traderbro.signalanalysis.telegram.TelegramUserClient client,
+            tools.jackson.databind.ObjectMapper objectMapper,
+            com.traderbro.signalanalysis.SignalAnalysisProperties props,
+            io.micrometer.core.instrument.MeterRegistry meterRegistry) {
+        return new com.traderbro.signalanalysis.ingestion.TelegramIngestEventProcessor(
+                events, channels, messageService, discovery, client, objectMapper, props,
+                meterRegistry);
+    }
+
+    @Bean
+    @Profile("!signal-auth")
+    @ConditionalOnProperty(name = "signal-analysis.ingestion.enabled", havingValue = "true")
+    public com.traderbro.signalanalysis.service.TelegramHistorySyncService telegramHistorySyncService(
+            com.traderbro.signalanalysis.telegram.TelegramUserClient client,
+            com.traderbro.signalanalysis.service.TelegramMessageService messageService,
+            com.traderbro.signalanalysis.repository.TelegramMessageRepository messages,
+            com.traderbro.signalanalysis.repository.TelegramChannelSyncStateRepository states,
+            com.traderbro.signalanalysis.repository.TelegramSyncRunRepository syncRuns,
+            com.traderbro.signalanalysis.ingestion.TelegramUpdateRouter router,
+            com.traderbro.signalanalysis.SignalAnalysisProperties props) {
+        return new com.traderbro.signalanalysis.service.TelegramHistorySyncService(
+                client, messageService, messages, states, syncRuns, router, props);
+    }
+
+    @Bean
+    @Profile("!signal-auth")
+    @ConditionalOnProperty(name = "signal-analysis.ingestion.enabled", havingValue = "true")
+    public com.traderbro.signalanalysis.SignalIngestionLifecycle signalIngestionLifecycle(
+            com.traderbro.signalanalysis.SignalAnalysisProperties props,
+            com.traderbro.signalanalysis.telegram.TelegramUserClient client,
+            com.traderbro.signalanalysis.ingestion.TelegramUpdateRouter router,
+            com.traderbro.signalanalysis.ingestion.TelegramIngestEventProcessor processor,
+            com.traderbro.signalanalysis.service.TelegramChannelDiscoveryService discovery,
+            com.traderbro.signalanalysis.service.TelegramHistorySyncService historySync,
+            com.traderbro.signalanalysis.repository.TelegramChannelRepository channels,
+            com.traderbro.signalanalysis.repository.TelegramChannelSyncStateRepository states,
+            com.traderbro.signalanalysis.repository.TelegramIngestEventRepository events,
+            com.traderbro.signalanalysis.telegram.TelegramSessionManager session,
+            io.micrometer.core.instrument.MeterRegistry meterRegistry) {
+        return new com.traderbro.signalanalysis.ingestion.SignalIngestionLifecycleManager(
+                props, client, router, processor, discovery, historySync, channels, states, events,
+                session, meterRegistry);
     }
 
     // ------------------------------------------------------------------ startup sequence

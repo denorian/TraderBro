@@ -187,6 +187,52 @@ backtest:
     train-days: 180
     test-days: 60
 
+signal-analysis:
+  enabled: true
+  api:
+    default-page-size: 50
+    max-page-size: 200
+    channel-list-refresh-ms: 30000
+    status-refresh-ms: 10000
+  ingestion:
+    enabled: ${SIGNAL_ANALYSIS_INGESTION_ENABLED:false}
+    # Local dev default: ./telegram-user (writable, git-ignored). Docker overrides these via
+    # TELEGRAM_TDLIB_DB_DIR / TELEGRAM_TDLIB_FILES_DIR to the /var/lib/traderbro/telegram-user volume.
+    session-database-directory: ${TELEGRAM_TDLIB_DB_DIR:./telegram-user/tdlib-db}
+    session-files-directory: ${TELEGRAM_TDLIB_FILES_DIR:./telegram-user/files}
+    database-encryption-key: ${TELEGRAM_TDLIB_DATABASE_ENCRYPTION_KEY:}
+    api-id: ${TELEGRAM_API_ID:0}
+    api-hash: ${TELEGRAM_API_HASH:}
+    phone-number: ${TELEGRAM_PHONE_NUMBER:}
+    monitoring-poll-interval: 5s
+    inbox:
+      queue-capacity: 10000
+      claim-batch-size: 100
+      max-attempts: 10
+      initial-retry-delay: 2s
+      max-retry-delay: 5m
+      raw-event-retention-days: 30
+      cleanup-interval: 1h
+    discovery:
+      page-size: 100
+      sync-interval: 15m
+      completion-timeout: 2m
+    history:
+      enabled: true
+      page-size: 100
+      full-backfill-enabled: true
+      max-concurrent-channel-backfills: 1
+      tail-size: 100
+      tail-sync-interval: 5m
+      request-pacing-delay: 1500ms
+      max-no-progress-pages: 3
+    lifecycle:
+      heartbeat-interval: 10s
+      heartbeat-timeout: 45s
+      callback-threads: 1
+      inbox-threads: 2
+      history-threads: 2
+
 spring:
   application:
     name: traderbro
@@ -212,3 +258,4 @@ logging:
   level:
     com.traderbro: INFO
     ru.tinkoff.piapi: WARN
+    it.tdlight: WARN

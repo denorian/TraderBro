@@ -211,6 +211,73 @@ components:
         name: { type: string }
         description: { type: string }
         params: { type: object, additionalProperties: { type: string } }
+    SignalIngestionStatus:
+      type: string
+      enum: [DISABLED, WAITING_AUTH, PENDING, BACKFILL, ACTIVE, DEGRADED, UNAVAILABLE, ERROR]
+    SignalChannelDto:
+      type: object
+      properties:
+        id: { type: string }
+        telegramChatId: { type: string, description: int64 as string to avoid JS precision loss }
+        title: { type: string }
+        username: { type: string, nullable: true }
+        subscribed: { type: boolean }
+        archived: { type: boolean }
+        membershipStatus: { type: string }
+        monitoringEnabled: { type: boolean }
+        ingestionStatus: { $ref: '#/components/schemas/SignalIngestionStatus' }
+        lastMessageAt: { type: string, format: date-time, nullable: true }
+        lastSyncAt: { type: string, format: date-time, nullable: true }
+        messageCount: { type: integer, format: int64 }
+        editedMessageCount: { type: integer, format: int64 }
+        deletedMessageCount: { type: integer, format: int64 }
+        lastErrorCode: { type: string, nullable: true }
+    ChannelPageDto:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SignalChannelDto' }
+        total: { type: integer, format: int64 }
+        page: { type: integer }
+        size: { type: integer }
+    MonitoringUpdateRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+    MonitoringBulkRequest:
+      type: object
+      required: [enabled, channelIds]
+      properties:
+        enabled: { type: boolean }
+        channelIds:
+          type: array
+          items: { type: string }
+    MonitoringBulkResultDto:
+      type: object
+      properties:
+        applied: { type: integer }
+        skippedUnsubscribed: { type: integer }
+        notFound: { type: integer }
+    SyncRunResponse:
+      type: object
+      properties:
+        syncRunId: { type: string }
+    IngestionStatusDto:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        authorizationState: { type: string, enum: [WAIT_TDLIB_PARAMETERS, WAIT_PHONE_NUMBER, WAIT_CODE, WAIT_PASSWORD, WAIT_OTHER_DEVICE_CONFIRMATION, READY, LOGGING_OUT, CLOSED, FATAL] }
+        ingestionActive: { type: boolean }
+        lastIngestionHeartbeatAt: { type: string, format: date-time, nullable: true }
+        lastDiscoveryAt: { type: string, format: date-time, nullable: true }
+        pendingEventCount: { type: integer, format: int64 }
+        failedEventCount: { type: integer, format: int64 }
+    ErrorDto:
+      type: object
+      properties:
+        error: { type: string }
 paths:
   /api/instruments:
     get:
@@ -434,4 +501,94 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/TradeRecord' }
+                items: { $ref: '#/components/schemas/TradeRecord' }  /api/signal-analysis/channels:
+    get:
+      summary: Paginated Telegram channel list with ingestion status
+      operationId: signalChannels
+      parameters:
+        - { name: query, in: query, schema: { type: string, default: '' } }
+        - { name: subscribed, in: query, schema: { type: boolean, default: true } }
+        - { name: monitoring, in: query, schema: { type: boolean } }
+        - { name: archived, in: query, schema: { type: boolean } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/SignalIngestionStatus' } }
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, default: 50 } }
+        - { name: sort, in: query, schema: { type: string, default: title } }
+        - { name: direction, in: query, schema: { type: string, default: asc } }
+      responses:
+        '200':
+          description: Channel page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChannelPageDto' }
+    post:
+      summary: Trigger a manual channel-list sync (discovery)
+      operationId: signalChannelsSync
+      responses:
+        '202':
+          description: Discovery accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncRunResponse' }
+        '409':
+          description: Ingestion disabled or discovery already running
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorDto' }
+  /api/signal-analysis/channels/{id}/monitoring:
+    patch:
+      summary: Enable or disable monitoring for a channel
+      operationId: signalChannelMonitoring
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MonitoringUpdateRequest' }
+      responses:
+        '200':
+          description: Updated channel
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SignalChannelDto' }
+        '404':
+          description: Channel not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorDto' }
+        '409':
+          description: Cannot enable monitoring for an unsubscribed channel
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorDto' }
+  /api/signal-analysis/channels/monitoring:
+    patch:
+      summary: Bulk enable/disable monitoring for a set of channels
+      operationId: signalChannelMonitoringBulk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MonitoringBulkRequest' }
+      responses:
+        '200':
+          description: Bulk result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MonitoringBulkResultDto' }
+        '400':
+          description: Invalid channel id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorDto' }
+  /api/signal-analysis/ingestion/status:
+    get:
+      summary: Safe ingestion status
+      operationId: signalIngestionStatus
+      responses:
+        '200':
+          description: Ingestion status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestionStatusDto' }

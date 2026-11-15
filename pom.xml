@@ -13,7 +13,7 @@
 
     <groupId>com.traderbro</groupId>
     <artifactId>traderbro</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>4.0.0</version>
     <name>TraderBro</name>
     <description>Stage-1 trading engine for MOEX equities via T-Bank Invest API (sandbox)</description>
 
@@ -39,6 +39,18 @@
         <!-- T-Bank Invest API Java SDK -->
         <tinkoff-invest.version>1.51</tinkoff-invest.version>
         <logstash-logback.version>9.0</logstash-logback.version>
+
+        <!-- TDLight Java (stage 4.0 signal analysis: personal Telegram account ingestion).
+             Distributed ONLY on the MCHV Maven repo (mvn.mchv.eu), not Maven Central — see the
+             <repositories> block. Pinned; never use LATEST/RELEASE. -->
+        <tdlight.version>3.5.9+td.1.8.68</tdlight.version>
+        <!-- TDLight publishes the native JNI libraries under a separately-versioned artifact
+             (tdlight-natives). 4.0.597 is the newest that ships the macOS arm64 + Linux OpenSSL-3
+             classifiers on MCHV. The classifier is per build target: macOS dev defaults to
+             macos_arm64; the Docker build overrides it to linux_amd64_gnu_ssl3 via the "docker"
+             profile. -->
+        <tdlight.native.version>4.0.597</tdlight.native.version>
+        <tdlight.native.classifier>macos_arm64</tdlight.native.classifier>
 
         <!-- Boilerplate -->
         <!-- bumped to 1.18.48 (latest patch, keeps Java 25 support). -->
@@ -95,6 +107,19 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- Spring WebSocket: local (127.0.0.1) channel for interactive Telegram code/2FA entry in the
+             UI. The starter transitively pulls spring-boot-starter-tomcat; the project uses embedded
+             Jetty (corporate standard), so Tomcat is excluded to keep Jetty the only web server. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-tomcat</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jdbc</artifactId>
@@ -142,6 +167,24 @@
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
             <version>${logstash-logback.version}</version>
+        </dependency>
+
+        <!-- TDLight Java — personal Telegram account ingestion for signal analysis (stage 4.0).
+             Version is managed by the imported tdlight-java-bom. The tdlight-java artifact pulls
+             the platform native TDLib binary transitively (classifier-selected). Used ONLY by the
+             com.traderbro.signalanalysis.telegram.tdlib package; all beans behind it are
+             conditional on signal-analysis.ingestion.enabled. -->
+        <dependency>
+            <groupId>it.tdlight</groupId>
+            <artifactId>tdlight-java</artifactId>
+        </dependency>
+        <!-- Platform native JNI library (TDLight). Explicitly added because tdlight-java does not
+             pull a native transitively; the classifier is selected per build target. -->
+        <dependency>
+            <groupId>it.tdlight</groupId>
+            <artifactId>tdlight-natives</artifactId>
+            <version>${tdlight.native.version}</version>
+            <classifier>${tdlight.native.classifier}</classifier>
         </dependency>
 
         <!-- Database -->
@@ -221,6 +264,15 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- TDLight BOM: manages it.tdlight:* versions (tdlight-java and its transitive
+                 platform natives). Imported so the dependency needs no explicit version. -->
+            <dependency>
+                <groupId>it.tdlight</groupId>
+                <artifactId>tdlight-java-bom</artifactId>
+                <version>${tdlight.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <!-- Spring Boot 4.0.1 manages junit:junit to a nonexistent 5.12.2, which breaks
                  test resolution (grpc-testing depends on junit:junit). Pin the real JUnit 4. -->
             <dependency>
@@ -230,6 +282,18 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <repositories>
+        <!-- TDLight Java is NOT on Maven Central. It is published to the MCHV Apache Maven
+             repository. Keep the id stable ("tdlight") so build settings can exclude this repo
+             from a global mirror (mirrorOf *,!tdlight) instead of forcing it through an internal
+             mirror that does not contain it. -->
+        <repository>
+            <id>tdlight</id>
+            <name>MCHV Apache Maven Packages (TDLight)</name>
+            <url>https://mvn.mchv.eu/repository/mchv/</url>
+        </repository>
+    </repositories>
 
     <build>
         <finalName>traderbro</finalName>
@@ -436,6 +500,15 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+
+        <!-- Docker image build: selects the Linux x86_64 OpenSSL-3 TDLight native classifier.
+             Activated explicitly by the Dockerfile (mvn ... -P docker package). -->
+        <profile>
+            <id>docker</id>
+            <properties>
+                <tdlight.native.classifier>linux_amd64_gnu_ssl3</tdlight.native.classifier>
+            </properties>
         </profile>
     </profiles>
 </project>

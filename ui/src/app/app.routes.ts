@@ -19,6 +19,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/backtest/backtest-list.component').then(m => m.BacktestListComponent)
   },
   {
+    path: 'signal-analysis/channels',
+    canActivate: [loginGuard],
+    loadComponent: () => import('./features/signal-analysis/signal-analysis-channels-page.component').then(m => m.SignalAnalysisChannelsPageComponent)
+  },
+  {
     path: 'backtest/new',
     canActivate: [loginGuard],
     loadComponent: () => import('./features/backtest/backtest-form.component').then(m => m.BacktestFormComponent)

@@ -17,7 +17,14 @@ import {
   StatusResponse,
   StrategyDto,
   TradeRecordDto,
-  BacktestRequest
+  BacktestRequest,
+  ChannelPageDto,
+  SignalChannelDto,
+  MonitoringUpdateRequest,
+  MonitoringBulkRequest,
+  MonitoringBulkResultDto,
+  SyncRunResponse,
+  IngestionStatusDto
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -126,5 +133,52 @@ export class ApiService {
     if (opts?.figi) { p = p.set('figi', opts.figi); }
     if (opts?.interval) { p = p.set('interval', opts.interval); }
     return this.http.get<AngulationEventDto[]>(`${this.base}/angulation`, { params: p });
+  }
+
+  // ---------------------------------------------------------------- signal analysis (stage 4.0)
+  signalChannels(opts?: {
+    query?: string; subscribed?: boolean; monitoring?: boolean; archived?: boolean;
+    status?: string; page?: number; size?: number; sort?: string; direction?: string;
+  }): Observable<ChannelPageDto> {
+    let p = new HttpParams()
+      .set('query', opts?.query ?? '')
+      .set('subscribed', String(opts?.subscribed ?? true))
+      .set('page', String(opts?.page ?? 0))
+      .set('size', String(opts?.size ?? 50))
+      .set('sort', opts?.sort ?? 'title')
+      .set('direction', opts?.direction ?? 'asc');
+    if (opts?.monitoring !== undefined) { p = p.set('monitoring', String(opts.monitoring)); }
+    if (opts?.archived !== undefined) { p = p.set('archived', String(opts.archived)); }
+    if (opts?.status) { p = p.set('status', opts.status); }
+    return this.http.get<ChannelPageDto>(`${this.base}/signal-analysis/channels`, { params: p });
+  }
+
+  setChannelMonitoring(id: string, enabled: boolean): Observable<SignalChannelDto> {
+    return this.http.patch<SignalChannelDto>(
+      `${this.base}/signal-analysis/channels/${id}/monitoring`,
+      { enabled } as MonitoringUpdateRequest);
+  }
+
+  setChannelMonitoringBulk(ids: string[], enabled: boolean): Observable<MonitoringBulkResultDto> {
+    return this.http.patch<MonitoringBulkResultDto>(
+      `${this.base}/signal-analysis/channels/monitoring`,
+      { enabled, channelIds: ids } as MonitoringBulkRequest);
+  }
+
+  syncChannels(): Observable<SyncRunResponse> {
+    return this.http.post<SyncRunResponse>(`${this.base}/signal-analysis/channels/sync`, {});
+  }
+
+  ingestionStatus(): Observable<IngestionStatusDto> {
+    return this.http.get<IngestionStatusDto>(`${this.base}/signal-analysis/ingestion/status`);
+  }
+
+  /**
+   * URL of the local-only WebSocket used to submit the Telegram 2FA password. The backend binds
+   * this endpoint to 127.0.0.1 and rejects any non-loopback connection, so the password never
+   * leaves this machine. Uses the same port as the REST API (backend :8080).
+   */
+  signalAuthWebSocketUrl(): string {
+    return 'ws://127.0.0.1:8080/ws/signal-analysis/auth';
   }
 }

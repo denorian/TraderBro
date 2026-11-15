@@ -35,6 +35,11 @@ import { ThemeService } from './core/theme.service';
             routerLink="/backtest"
             routerLinkActive="nav-active"
           >Бэктест</a>
+          <a
+            class="nav-link"
+            routerLink="/signal-analysis/channels"
+            routerLinkActive="nav-active"
+          >Каналы Telegram</a>
           <span class="spacer"></span>
           <button
             class="theme-toggle"

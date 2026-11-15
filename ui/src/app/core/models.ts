@@ -244,3 +244,67 @@ export interface StrategyDto {
   description: string;
   params: Record<string, string>;
 }
+
+// ---------------------------------------------------------------- signal analysis (stage 4.0)
+
+export type SignalIngestionStatus =
+  | 'DISABLED' | 'WAITING_AUTH' | 'PENDING' | 'BACKFILL'
+  | 'ACTIVE' | 'DEGRADED' | 'UNAVAILABLE' | 'ERROR';
+
+export interface SignalChannelDto {
+  id: string;
+  telegramChatId: string; // int64 as string
+  title: string;
+  username: string | null;
+  subscribed: boolean;
+  archived: boolean;
+  membershipStatus: string;
+  monitoringEnabled: boolean;
+  ingestionStatus: SignalIngestionStatus;
+  lastMessageAt: string | null;
+  lastSyncAt: string | null;
+  messageCount: number;
+  editedMessageCount: number;
+  deletedMessageCount: number;
+  lastErrorCode: string | null;
+}
+
+export interface ChannelPageDto {
+  items: SignalChannelDto[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+export interface MonitoringUpdateRequest {
+  enabled: boolean;
+}
+
+export interface MonitoringBulkRequest {
+  enabled: boolean;
+  channelIds: string[];
+}
+
+export interface MonitoringBulkResultDto {
+  applied: number;
+  skippedUnsubscribed: number;
+  notFound: number;
+}
+
+export interface SyncRunResponse {
+  syncRunId: string;
+}
+
+export type TelegramAuthState =
+  | 'WAIT_TDLIB_PARAMETERS' | 'WAIT_PHONE_NUMBER' | 'WAIT_CODE' | 'WAIT_PASSWORD'
+  | 'WAIT_OTHER_DEVICE_CONFIRMATION' | 'READY' | 'LOGGING_OUT' | 'CLOSED' | 'FATAL';
+
+export interface IngestionStatusDto {
+  enabled: boolean;
+  authorizationState: TelegramAuthState;
+  ingestionActive: boolean;
+  lastIngestionHeartbeatAt: string | null;
+  lastDiscoveryAt: string | null;
+  pendingEventCount: number;
+  failedEventCount: number;
+}

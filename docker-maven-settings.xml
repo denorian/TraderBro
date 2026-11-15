@@ -11,7 +11,9 @@
             <id>artifactory-maven-all</id>
             <name>TCS Bank Artifactory (Maven mirror)</name>
             <url>https://artifactory.tcsbank.ru/artifactory/maven-all</url>
-            <mirrorOf>*</mirrorOf>
+            <!-- Exclude the TDLight repo (id "tdlight", see pom.xml): it is not mirrored on the
+                 corporate Artifactory, so the Docker build resolves it directly from mvn.mchv.eu. -->
+            <mirrorOf>*,!tdlight</mirrorOf>
         </mirror>
     </mirrors>
 </settings>
