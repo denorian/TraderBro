@@ -1,0 +1,210 @@
+databaseChangeLog:
+  - changeSet:
+      id: 20261108-1
+      author: a.s.brovko
+      comment: Stage 4.0 signal analysis - channel metadata.
+      changes:
+        - createTable:
+            tableName: telegram_channels
+            remarks: Broadcast channels the personal account is (or was) subscribed to.
+            columns:
+              - column: { name: id, type: UUID, constraints: { nullable: false, primaryKey: true } }
+              - column: { name: telegram_chat_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: telegram_supergroup_id, type: BIGINT }
+              - column: { name: title, type: TEXT, constraints: { nullable: false } }
+              - column: { name: username, type: TEXT }
+              - column: { name: is_channel, type: BOOLEAN, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: is_subscribed, type: BOOLEAN, constraints: { nullable: false } }
+              - column: { name: is_archived, type: BOOLEAN, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: membership_status, type: TEXT, constraints: { nullable: false } }
+              - column: { name: monitoring_enabled, type: BOOLEAN, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: monitoring_updated_at, type: timestamptz }
+              - column: { name: first_seen_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: last_seen_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: subscription_synced_at, type: timestamptz }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamptz, constraints: { nullable: false } }
+        - addUniqueConstraint:
+            tableName: telegram_channels
+            columnNames: telegram_chat_id
+            constraintName: uq_telegram_channels_chat_id
+        - createIndex:
+            tableName: telegram_channels
+            indexName: idx_telegram_channels_subscribed
+            columns:
+              - column: { name: is_subscribed }
+              - column: { name: monitoring_enabled }
+  - changeSet:
+      id: 20261108-2
+      author: a.s.brovko
+      comment: Stage 4.0 signal analysis - per-channel sync progress.
+      changes:
+        - createTable:
+            tableName: telegram_channel_sync_state
+            remarks: Resumable history/backfill cursor per monitored channel.
+            columns:
+              - column: { name: channel_id, type: UUID, constraints: { nullable: false, primaryKey: true, foreignKeyName: fk_telegram_sync_state_channel, referencedTableName: telegram_channels, referencedColumnNames: id } }
+              - column: { name: oldest_loaded_message_id, type: BIGINT }
+              - column: { name: oldest_loaded_message_sent_at, type: timestamptz }
+              - column: { name: newest_loaded_message_id, type: BIGINT }
+              - column: { name: full_backfill_completed, type: BOOLEAN, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: last_history_request_message_id, type: BIGINT }
+              - column: { name: last_live_event_at, type: timestamptz }
+              - column: { name: last_tail_sync_at, type: timestamptz }
+              - column: { name: last_successful_sync_at, type: timestamptz }
+              - column: { name: last_error_code, type: TEXT }
+              - column: { name: last_error_message, type: TEXT }
+              - column: { name: sync_attempts, type: INTEGER, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamptz, constraints: { nullable: false } }
+  - changeSet:
+      id: 20261108-3
+      author: a.s.brovko
+      comment: Stage 4.0 signal analysis - current message projection.
+      changes:
+        - createTable:
+            tableName: telegram_messages
+            remarks: Current projection of a message; deletion marks availability but keeps content.
+            columns:
+              - column: { name: id, type: UUID, constraints: { nullable: false, primaryKey: true } }
+              - column: { name: channel_id, type: UUID, constraints: { nullable: false, foreignKeyName: fk_telegram_messages_channel, referencedTableName: telegram_channels, referencedColumnNames: id } }
+              - column: { name: telegram_message_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: sender_type, type: TEXT }
+              - column: { name: sender_id, type: BIGINT }
+              - column: { name: author_signature, type: TEXT }
+              - column: { name: sent_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: source_edited_at, type: timestamptz }
+              - column: { name: reply_to_message_id, type: BIGINT }
+              - column: { name: forward_metadata, type: JSONB }
+              - column: { name: content_type, type: TEXT, constraints: { nullable: false } }
+              - column: { name: text_content, type: TEXT }
+              - column: { name: formatted_entities, type: JSONB }
+              - column: { name: media_metadata, type: JSONB }
+              - column: { name: content_hash, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: current_version_no, type: INTEGER, constraints: { nullable: false } }
+              - column: { name: availability_status, type: TEXT, constraints: { nullable: false } }
+              - column: { name: first_observed_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: last_observed_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: deletion_observed_at, type: timestamptz }
+              - column: { name: is_permanently_deleted, type: BOOLEAN, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamptz, constraints: { nullable: false } }
+        - addUniqueConstraint:
+            tableName: telegram_messages
+            columnNames: channel_id, telegram_message_id
+            constraintName: uq_telegram_messages_channel_msg
+        - createIndex:
+            tableName: telegram_messages
+            indexName: idx_telegram_messages_channel_sent
+            columns:
+              - column: { name: channel_id }
+              - column: { name: sent_at, descending: true }
+        - createIndex:
+            tableName: telegram_messages
+            indexName: idx_telegram_messages_deleted
+            columns:
+              - column: { name: availability_status }
+  - changeSet:
+      id: 20261108-4
+      author: a.s.brovko
+      comment: Stage 4.0 signal analysis - append-only message versions.
+      changes:
+        - createTable:
+            tableName: telegram_message_versions
+            remarks: Append-only history; a return to a previous text is a new version.
+            columns:
+              - column: { name: id, type: UUID, constraints: { nullable: false, primaryKey: true } }
+              - column: { name: message_id, type: UUID, constraints: { nullable: false, foreignKeyName: fk_telegram_versions_message, referencedTableName: telegram_messages, referencedColumnNames: id } }
+              - column: { name: version_no, type: INTEGER, constraints: { nullable: false } }
+              - column: { name: change_type, type: TEXT, constraints: { nullable: false } }
+              - column: { name: source_edited_at, type: timestamptz }
+              - column: { name: observed_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: content_type, type: TEXT, constraints: { nullable: false } }
+              - column: { name: text_content, type: TEXT }
+              - column: { name: formatted_entities, type: JSONB }
+              - column: { name: media_metadata, type: JSONB }
+              - column: { name: forward_metadata, type: JSONB }
+              - column: { name: content_hash, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: source_event_id, type: UUID }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+        - addUniqueConstraint:
+            tableName: telegram_message_versions
+            columnNames: message_id, version_no
+            constraintName: uq_telegram_versions_msg_no
+        - createIndex:
+            tableName: telegram_message_versions
+            indexName: idx_telegram_versions_message
+            columns:
+              - column: { name: message_id }
+  - changeSet:
+      id: 20261108-5
+      author: a.s.brovko
+      comment: Stage 4.0 signal analysis - durable inbox.
+      changes:
+        - createTable:
+            tableName: telegram_ingest_events
+            remarks: Durable inbox; at-least-once, idempotent by dedup_key. Raw payload is retained only briefly.
+            columns:
+              - column: { name: received_seq, type: BIGSERIAL, constraints: { nullable: false, primaryKey: true } }
+              - column: { name: id, type: UUID, constraints: { nullable: false } }
+              - column: { name: event_type, type: TEXT, constraints: { nullable: false } }
+              - column: { name: telegram_chat_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: telegram_message_id, type: BIGINT }
+              - column: { name: dedup_key, type: TEXT }
+              - column: { name: payload, type: JSONB, constraints: { nullable: false } }
+              - column: { name: received_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: status, type: TEXT, constraints: { nullable: false } }
+              - column: { name: attempts, type: INTEGER, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: available_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: locked_at, type: timestamptz }
+              - column: { name: locked_by, type: TEXT }
+              - column: { name: processed_at, type: timestamptz }
+              - column: { name: last_error, type: TEXT }
+        - addUniqueConstraint:
+            tableName: telegram_ingest_events
+            columnNames: id
+            constraintName: uq_telegram_ingest_events_id
+        - addUniqueConstraint:
+            tableName: telegram_ingest_events
+            columnNames: dedup_key
+            constraintName: uq_telegram_ingest_events_dedup
+        - createIndex:
+            tableName: telegram_ingest_events
+            indexName: idx_telegram_ingest_events_claim
+            columns:
+              - column: { name: status }
+              - column: { name: available_at }
+              - column: { name: received_seq }
+        - createIndex:
+            tableName: telegram_ingest_events
+            indexName: idx_telegram_ingest_events_chat_msg
+            columns:
+              - column: { name: telegram_chat_id }
+              - column: { name: telegram_message_id }
+  - changeSet:
+      id: 20261108-6
+      author: a.s.brovko
+      comment: Stage 4.0 signal analysis - sync run ledger.
+      changes:
+        - createTable:
+            tableName: telegram_sync_runs
+            remarks: Sync run ledger for discovery/backfill/tail reconcile, resumable after restart.
+            columns:
+              - column: { name: id, type: UUID, constraints: { nullable: false, primaryKey: true } }
+              - column: { name: channel_id, type: UUID, constraints: { foreignKeyName: fk_telegram_sync_runs_channel, referencedTableName: telegram_channels, referencedColumnNames: id } }
+              - column: { name: run_type, type: TEXT, constraints: { nullable: false } }
+              - column: { name: status, type: TEXT, constraints: { nullable: false } }
+              - column: { name: requested_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: started_at, type: timestamptz }
+              - column: { name: finished_at, type: timestamptz }
+              - column: { name: cursor_message_id, type: BIGINT }
+              - column: { name: loaded_count, type: INTEGER, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: created_count, type: INTEGER, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: edited_count, type: INTEGER, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: error_code, type: TEXT }
+              - column: { name: error_message, type: TEXT }
+        - createIndex:
+            tableName: telegram_sync_runs
+            indexName: idx_telegram_sync_runs_channel
+            columns:
+              - column: { name: channel_id }
+              - column: { name: run_type }
